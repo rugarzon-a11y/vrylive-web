@@ -1,0 +1,17 @@
+{
+  "name": "Vrylive Famille",
+  "short_name": "Vrylive",
+  "description": "Coordonner les soins en famille / Coordinar el cuidado en familia / Coordinate care as a family",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F1F0F7",
+  "theme_color": "#2A2159",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

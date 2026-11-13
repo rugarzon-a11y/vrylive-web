@@ -1,0 +1,15 @@
+# Alias cortos por idioma
+/familia            /famille/?lang=es          301
+/family             /famille/?lang=en          301
+
+# Demo de Vrylive Famille (atajo)
+/famille/demo       /famille/app/demo.html     302
+
+# La app vivía en /app: se conserva el enlace antiguo
+/app                /famille/app/              301
+/app/*              /famille/app/:splat        301
+
+# Páginas legales de la app
+/conditions         /famille/app/conditions.html   301
+/privacy            /famille/app/privacidad.html   301
+/confidentialite    /famille/app/privacidad.html   301
