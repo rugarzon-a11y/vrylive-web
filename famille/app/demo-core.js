@@ -94,7 +94,7 @@ T.moods=[[2,2],[1,3]].map(([n,l])=>({user_id:'u-s',circle_id:C,week_start:wk(n),
 T.invites=[{id:'inv1',circle_id:C,token:'demoinv1',display_name:'Lucía',relation:'',city:'Laval',role:'fam',contact:'lucia@example.com',lang:'es',accepted_at:null,created_at:at(d(-3)),expires_at:new Date(Date.now()+11*864e5).toISOString()},
 {id:'inv2',circle_id:C,token:'demoinv2',display_name:'Paul',relation:'',city:'Québec',role:'viewer',contact:'418 555-0144',lang:'fr',accepted_at:null,created_at:at(d(-20)),expires_at:new Date(Date.now()-6*864e5).toISOString()},
 {id:'inv3',circle_id:C,token:'demoinv3',display_name:'Camila',relation:'',city:'Gatineau',role:'fam',contact:null,lang:'es',accepted_at:at(d(-40)),created_at:at(d(-41)),expires_at:at(d(-27))}];
-T.audit_log=[];T.notif_prefs=[];T.circle_private=[{circle_id:C,person_phone:'450 555-0100',person_email:null}];
+T.audit_log=[];{const acts=[['s','insert','tasks'],['m','update','tasks'],['c','insert','events'],['s','open','documents'],['p','insert','voices'],['s','insert','med_logs'],['m','insert','journal'],['d','open','documents'],['s','update','meds'],['c','delete','tasks'],['s','insert','meeting_points'],['m','insert','med_logs']];let k=0;for(let i=0;i<70;i++){const [w,a,tg]=acts[i%acts.length],x=new Date();x.setHours(9+(i%10),(i*7)%60,0,0);x.setDate(x.getDate()-Math.floor(i/2));T.audit_log.push({id:'al'+(++k),circle_id:C,actor_member:w,action:a,target:tg,target_id:null,created_at:x.toISOString()})}}T.notif_prefs=[];T.circle_private=[{circle_id:C,person_phone:'450 555-0100',person_email:null}];
 T.meds=[{id:'md1',circle_id:C,name:['Pastilla de la presión','Comprimé pour la pression','Blood pressure pill'],dose:['1 comprimido','1 comprimé','1 tablet'],times:'08:00',note:['Con el desayuno','Avec le déjeuner','With breakfast'],giver:'p',active:true},
 {id:'md2',circle_id:C,name:['Vitamina D','Vitamine D','Vitamin D'],dose:['1 cápsula','1 capsule','1 capsule'],times:'08:00',note:null,giver:'p',active:true},
 {id:'md3',circle_id:C,name:['Gotas para los ojos','Gouttes pour les yeux','Eye drops'],dose:['1 gota en cada ojo','1 goutte dans chaque œil','1 drop in each eye'],times:'08:00, 20:00',note:null,giver:'s',active:true}];
@@ -115,9 +115,9 @@ const lang=v=>Array.isArray(v)?v[window.CC_DEMO.li()]:v;
 const out=r=>{const o={};for(const k in r)o[k]=lang(r[k]);return o};
 const DEF={meeting_points:{decision:null,decision_who:null,decision_due:null},tasks:{minutes:30,done_at:null,done_by:null,relief_member:null,priority:'normal'},messages:{important:false,sys_key:null},voices:{status:'new',via_member:null},documents:{storage_path:null,exp:null}};
 class Q{constructor(t){this.t=t;this.f=[];this.op='select'}
- select(){return this} eq(c,v){this.f.push([c,v]);return this} order(c,o){this.o=[c,o&&o.ascending];return this} limit(n){this.n=n;return this} single(){this.s=true;return this}
+ select(){return this} eq(c,v){this.f.push([c,v]);return this} in(c,vs){this.g=(this.g||[]).concat([r=>vs.includes(r[c])]);return this} gte(c,v){this.g=(this.g||[]).concat([r=>String(r[c])>=v]);return this} lte(c,v){this.g=(this.g||[]).concat([r=>String(r[c])<=v]);return this} order(c,o){this.o=[c,o&&o.ascending];return this} limit(n){this.n=n;return this} single(){this.s=true;return this}
  insert(r){this.op='insert';this.p=r;return this} update(r){this.op='update';this.p=r;return this} delete(){this.op='delete';return this} upsert(r){this.op='upsert';this.p=r;return this}
- match(r){return this.f.every(([c,v])=>r[c]===v)}
+ match(r){return this.f.every(([c,v])=>r[c]===v)&&(this.g||[]).every(fn=>fn(r))}
  run(){const A=T[this.t];
   if(this.op==='insert'){A.push({id:nid(),created_at:new Date().toISOString(),...(DEF[this.t]||{}),...this.p});return null}
   if(this.op==='upsert'&&this.t==='circle_private'){const e=A.find(m=>m.circle_id===this.p.circle_id);if(e)Object.assign(e,this.p);else A.push({...this.p});return null}
@@ -126,6 +126,7 @@ class Q{constructor(t){this.t=t;this.f=[];this.op='select'}
   if(this.op==='delete'){T[this.t]=A.filter(r=>!this.match(r));return null}
   let rows=A.filter(r=>this.match(r)&&(!VIS[this.t]||VIS[this.t](r))).map(out);
   if(this.t==='circle_members')rows=rows.map(r=>({...r,circles:{person_name:person.name}}));
+  if(this.o){const [c,asc]=this.o;rows=[...rows].sort((x,y)=>String(x[c]).localeCompare(String(y[c]))*(asc===false?-1:1))}
   if(this.n)rows=rows.slice(0,this.n);
   return this.s?rows[0]:rows}
  then(a,b){let v;try{v={data:this.run(),error:null}}catch(e){v={data:null,error:e}}return Promise.resolve(v).then(a,b)}}

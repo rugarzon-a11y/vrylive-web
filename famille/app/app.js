@@ -29,6 +29,25 @@ let session=null,memberships=[],cid=null,D=null,authMode='login',authMsg='',reco
 let pendingInvite=null,invitePreview=null,inviteChecked=false;
 let view='home',taskFilter='open',taskWho=null,msgFilter='all',jFilter='all',vFilter='all',selDate=today(),calY=new Date().getFullYear(),calM=new Date().getMonth();
 
+let auditN=30,auditF={who:'',act:'',from:'',to:''},auditMore=false;
+const AUDIT_GROUPS={insert:['insert'],update:['update'],delete:['delete'],open:['open'],rep:['propose','confirm','end']};
+async function fetchAudit(){
+ let qy=db.from('audit_log').select('*').eq('circle_id',cid);
+ if(auditF.who)qy=qy.eq('actor_member',auditF.who);
+ if(auditF.act)qy=qy.in('action',AUDIT_GROUPS[auditF.act]);
+ if(auditF.from)qy=qy.gte('created_at',new Date(auditF.from+'T00:00:00').toISOString());
+ if(auditF.to)qy=qy.lte('created_at',new Date(auditF.to+'T23:59:59').toISOString());
+ const rows=await must(qy.order('created_at',{ascending:false}).limit(auditN+1));
+ auditMore=rows.length>auditN;return rows.slice(0,auditN);
+}
+async function refreshAudit(){try{D.audit=await fetchAudit()}catch(e){toast(errText(e))}render(true)}
+function auditSection(){
+ if(D.audit===null)return '';
+ const f=auditF,filtered=f.who||f.act||f.from||f.to;
+ const sel=`<div class="afilters"><label>${t('auditWho')}<select data-change="auditWho">${opts([['',t('mAll')],...D.members.map(m=>[m.id,m.display_name])],f.who)}</select></label><label>${t('auditAct')}<select data-change="auditAct">${opts([['',t('mAll')],['insert',t('ag_insert')],['update',t('ag_update')],['delete',t('ag_delete')],['open',t('ag_open')],['rep',t('ag_rep')]],f.act)}</select></label><label>${t('auditFrom')}<input type="date" data-change="auditFrom" value="${esc(f.from)}"></label><label>${t('auditTo')}<input type="date" data-change="auditTo" value="${esc(f.to)}"></label></div>${filtered?`<p><button class="linkbtn" data-act="auditReset">${t('auditReset')}</button></p>`:''}`;
+ const list=D.audit.length?`<ul>${D.audit.map(a=>{const s=stamp(a.created_at),m=member(a.actor_member);return `<li class="row"><div class="grow"><span>${esc(m?m.display_name:t('exMember'))} ${t('a_'+a.action)} ${t('o_'+a.target)}</span><div class="meta"><span>${esc(day(s.date))}, ${s.time}</span></div></div></li>`}).join('')}</ul>`:`<p class="empty">${t(filtered?'auditNone':'emptyList')}</p>`;
+ return `<section class="sheet"><h2>${t('auditT')}</h2><p class="note">${t('auditNote')}</p>${sel}${list}${auditMore?`<p style="padding:10px 0"><button class="btn small ghost" data-act="auditMoreBtn">${t('seeMore')}</button></p>`:''}</section>`;
+}
 const LI={es:0,fr:1,en:2},tl=(k,l,...a)=>a.reduce((s,v,i)=>s.split('{'+i+'}').join(v),(S[k]||[k,k,k])[l]);
 const invState=i=>i.accepted_at?'accepted':new Date(i.expires_at)<=new Date()?'expired':'pending';
 const CS=()=>li===1?'\u00A0: ':': ',CL=()=>li===1?'\u00A0:':':';
@@ -50,7 +69,8 @@ const seeDocs=()=>isCoord()||speaksFor();
 const firstName=()=>D.circle.person_name.split(' ')[0];
 const open=()=>D.tasks.filter(x=>!x.done_at);
 const isLate=x=>!x.done_at&&x.due<today();
-const navItems=()=>NAV.filter(n=>n[0]!=='foryou'||!isPerson());
+const PERSON_NAV=[['home',0],['voice',0],['calendar',0],['messages',0],['meds',0],['documents',1],['meeting',1],['tasks',1],['journal',1],['profile',1]];
+const navItems=()=>isPerson()?PERSON_NAV.map(([k,sec])=>[k,sec,NAV.find(n=>n[0]===k)[2]]):NAV;
 const color=m=>`var(--m${(m.color%6)+1})`;
 const ini=n=>String(n||'?').trim().slice(0,2);
 function av(id,sm){const m=member(id);return m?`<span class="av${sm?' sm':''}" style="background:${color(m)}" aria-hidden="true">${esc(ini(m.display_name))}</span>`:`<span class="av none${sm?' sm':''}" aria-hidden="true">?</span>`}
@@ -73,7 +93,7 @@ async function load(){
   const [invites,priv,audit]=await Promise.all([
     role==='coord'?q('invites'):Promise.resolve([]),
     role==='coord'?db.from('circle_private').select('*').eq('circle_id',cid).then(r=>r.error?[]:r.data,()=>[]):Promise.resolve([]),
-    (role==='coord'||role==='person'||(circle.capacity_status==='represented'&&circle.rep_member_id===members.find(m=>m.user_id===session.user.id).id))?must(db.from('audit_log').select('*').eq('circle_id',cid).order('created_at',{ascending:false}).limit(30)):Promise.resolve([])]);
+    (role==='coord'||role==='person'||(circle.capacity_status==='represented'&&circle.rep_member_id===members.find(m=>m.user_id===session.user.id).id))?fetchAudit():Promise.resolve(null)]);
   const qs=tbl=>db.from(tbl).select('*').eq('circle_id',cid).then(r=>r.error?[]:r.data,()=>[]);
   const [meds,med_logs,meetings,meeting_points,notif_prefs]=await Promise.all(['meds','med_logs','meetings','meeting_points','notif_prefs'].map(qs));
   D={priv:(priv&&priv[0])||null,meds,med_logs,meetings,meeting_points,notif_prefs,circle,members:members.sort((a,b)=>a.created_at.localeCompare(b.created_at)),events,tasks,messages:messages.sort((a,b)=>a.created_at.localeCompare(b.created_at)),journal,documents,contacts,needs,practical,voices,replies,wishes,moods,invites,audit};
@@ -263,7 +283,7 @@ profile(){
   <section class="sheet"><h2>${t('capT')}</h2>${cap}</section>
   <section class="sheet"><h2>${t('agrT')}</h2><p class="note" style="padding-bottom:8px">${t('agrHelp')}</p>${c.family_agreement?`<p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(c.family_agreement)}</p>${c.family_agreement_date?`<p class="note">${esc(fmt(c.family_agreement_date,{day:'numeric',month:'long',year:'numeric'}))}</p>`:''}`:`<p class="empty">${t('emptyList')}</p>`}${isCoord()?`<p style="padding:8px 0"><button class="btn small ghost" data-act="editAgreement">${t('agrEdit')}</button></p>`:''}</section>
   ${notifSection()}<section class="sheet"><h2>${t('account')}</h2><div class="vactions" style="margin:8px 0 12px"><button class="btn small ghost" data-act="exportData">${t('exportData')}</button><button class="btn small ghost" data-act="signOut">${t('signOut')}</button>${me().role!=='coord'||D.members.filter(m=>m.role==='coord').length>1?`<button class="btn small ghost" data-act="leave">${t('leave')}</button>`:''}${isCoord()?`<button class="btn small ghost" data-act="delCircle">${t('delCircle')}</button>`:''}</div><p style="padding-bottom:10px;display:flex;gap:16px;flex-wrap:wrap"><a href="conditions.html" target="_blank" rel="noopener">${t('termsLink')}</a><a href="privacidad.html" target="_blank" rel="noopener">${t('privacyLink')}</a></p></section>
-  ${D.audit.length?`<section class="sheet"><h2>${t('auditT')}</h2><ul>${D.audit.map(a=>{const s=stamp(a.created_at),m=member(a.actor_member);return `<li class="row"><div class="grow"><span>${esc(m?m.display_name:'')} ${t('a_'+a.action)} ${t('o_'+a.target)}</span><div class="meta"><span>${esc(day(s.date))}, ${s.time}</span></div></div></li>`}).join('')}</ul></section>`:''}</div>
+  ${auditSection()}</div>
   <p class="note">${t('disclaimer')}</p>`;
 },
 summary(){
@@ -315,6 +335,18 @@ function createView(){return `<div class="top"><div class="logo">${LOGO}Vrylive<
  <label for="c-me">${t('yourName')}<input id="c-me" required maxlength="80"></label><label for="c-r">${t('yourRel')}<input id="c-r" maxlength="60"></label><label for="c-mc">${t('yourCity')}<input id="c-mc" maxlength="80"></label>
  <button class="btn">${t('create')}</button><button type="button" class="linkbtn" data-act="signOut">${t('signOut')}</button></form>`}
 
+let installEvt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;if(booted)render(true)});
+window.addEventListener('appinstalled',()=>{installEvt=null;store.set('vl-install-snooze',String(Date.now()+3650*864e5));render(true)});
+const isStandalone=()=>{try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+function installBanner(){
+ if(DEMO||isStandalone()||!tourDone())return '';
+ const snooze=+(store.get('vl-install-snooze')||0);if(snooze>Date.now())return '';
+ if(installEvt)return `<section class="install" role="region" aria-label="${esc(t('installT'))}"><img src="icons/icon-192.png" alt="" width="56" height="56"><div class="grow"><b>${t('installT')}</b><p>${t('installAndroid')}</p><div class="vactions"><button class="btn" data-act="installApp">${t('installBtn')}</button><button class="btn ghost" data-act="installLater">${t('notNow')}</button></div></div></section>`;
+ if(isIOS())return `<section class="install" role="region" aria-label="${esc(t('installT'))}"><img src="icons/apple-touch-icon.png" alt="" width="56" height="56"><div class="grow"><b>${t('installT')}</b><ol class="ios-steps"><li>${t('installIos1')} <svg class="ios-share" viewBox="0 0 24 24" role="img" aria-label="${esc(t('shareIconAlt'))}"><path d="M12 15V3M8 7l4-4 4 4M6 11H5v10h14V11h-1"/></svg></li><li>${t('installIos2')}</li></ol><div class="vactions"><button class="btn ghost" data-act="installLater">${t('notNow')}</button></div></div></section>`;
+ return '';
+}
 function tourDone(){return store.get('vl-tour-done')==='1'||!!(session&&session.user&&session.user.user_metadata&&session.user.user_metadata.tour_done)}
 let tourStep=0;
 function showTour(){
@@ -337,14 +369,15 @@ function render(keep){
   else if(!session)solo=authView();
   else if(pendingInvite)solo=inviteView();
   else if(!cid||!D)solo=createView();
-  if(solo!==null){app.className='app solo';nav.innerHTML='';root.innerHTML=solo;window.scrollTo(0,0);if(session&&!recovery&&!pendingInvite)setTimeout(showTour,0);return}
+  if(solo!==null){document.documentElement.classList.remove('pm');app.className='app solo';nav.innerHTML='';root.innerHTML=solo;window.scrollTo(0,0);if(session&&!recovery&&!pendingInvite)setTimeout(showTour,0);return}
   if(session)setTimeout(showTour,0);
   if(!isPerson()||view!=='foryou'){}else view='home';
-  app.className='app';
+  app.className='app'+(isPerson()?' person-mode':'');
+  document.documentElement.classList.toggle('pm',isPerson());
   const active=view;
-  nav.innerHTML=`<div class="brand">${LOGO}<span>Vrylive<small style="display:block;font:600 .8rem var(--body);color:var(--muted)">${t('appSub')}</small></span></div>`+navItems().map(([k,sec,p])=>`<button class="${sec?'nav-2nd':''}" data-nav="${k}"${active===k?' aria-current="page"':''}>${ic(p)}<span>${t(k)}</span></button>`).join('')+`<button class="nav-more" data-nav="more"${active==='more'||NAV.some(n=>n[1]&&n[0]===active)?' aria-current="page"':''}>${ic('M5 12h.01M12 12h.01M19 12h.01')}<span>${t('more')}</span></button>`;
+  nav.innerHTML=`<div class="brand">${LOGO}<span>Vrylive<small style="display:block;font:600 .8rem var(--body);color:var(--muted)">${t('appSub')}</small></span></div>`+navItems().map(([k,sec,p])=>`<button class="${sec?'nav-2nd':''}" data-nav="${k}"${active===k?' aria-current="page"':''}>${ic(p)}<span>${t(k)}</span></button>`).join('')+`<button class="nav-more" data-nav="more"${active==='more'||navItems().some(n=>n[1]&&n[0]===active)?' aria-current="page"':''}>${ic('M5 12h.01M12 12h.01M19 12h.01')}<span>${t('more')}</span></button>`;
   const sw=memberships.length>1?`<select class="circle-switch" data-change="circle" aria-label="Vrylive Famille">${opts(memberships.map(m=>[m.circle_id,m.circles.person_name]),cid)}</select>`:`<span class="note">${esc(D.circle.person_name)}</span>`;
-  root.innerHTML=(DEMO?`<p class="demo" style="border-radius:10px">${t('demoBanner')}${CFG.realUrl?` <a href="${CFG.realUrl}" style="color:#F5BE3B;font-weight:700">${t('createMine')}</a>`:''}</p><div class="viewer"><label for="demo-user">${t('viewAs')}</label><select id="demo-user" data-change="demoUser">${opts(D.members.map(m=>[m.user_id,m.display_name+' ('+roleName(m.role)+')']),session.user.id)}</select></div>`:'')+`<div class="top">${sw}${langBar()}</div>`+V[view]();
+  root.innerHTML=(DEMO?`<p class="demo" style="border-radius:10px">${t('demoBanner')}${CFG.realUrl?` <a href="${CFG.realUrl}" style="color:#F5BE3B;font-weight:700">${t('createMine')}</a>`:''}</p><div class="viewer"><label for="demo-user">${t('viewAs')}</label><select id="demo-user" data-change="demoUser">${opts(D.members.map(m=>[m.user_id,m.display_name+' ('+roleName(m.role)+')']),session.user.id)}</select></div>`:'')+`<div class="top">${sw}${langBar()}</div>`+(store.get('vl-joined')==='1'&&!DEMO?`<section class="joined" role="status"><b>${t('joinedT')}</b><p>${t('joinedP')}</p><button class="btn small" data-act="joinedOk">${t('understood')}</button></section>`:'')+(view==='home'?installBanner():'')+V[view]();
   window.scrollTo(0,keep?y:0);
 }
 let toastT;function toast(m){const el=document.getElementById('toast');el.textContent=m;el.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('on'),3200)}
@@ -392,7 +425,7 @@ const A={
  lang:id=>{li=+id;store.set('cc-lang',id);if(DEMO&&session)return act(async()=>{});render(true)},
  mode:id=>{authMode=id;authMsg='';render()},
  signOut:async()=>{if(DEMO){toast(t('demoNo'));return}try{await db.auth.signOut({scope:'local'})}catch(e){}try{Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))}catch(e){}store.del('cc-circle');session=null;D=null;cid=null;memberships=[];location.replace(location.pathname)},
- acceptInvite:async()=>{try{const c=await rpc('accept_invite',{p_token:pendingInvite});clearInvite();await loadMemberships();cid=c;store.set('cc-circle',c);await load();view='home';render()}catch(e){toast(errText(e));clearInvite();render()}},
+ acceptInvite:async()=>{try{const c=await rpc('accept_invite',{p_token:pendingInvite});clearInvite();store.set('vl-joined','1');await loadMemberships();cid=c;store.set('cc-circle',c);await load();view='home';render()}catch(e){toast(errText(e));clearInvite();render()}},
  declineInvite:()=>{clearInvite();render()},
  toggle:id=>{const x=task(id);if(x.done_at)return act(()=>upd('tasks',id,{done_at:null,done_by:null}));if(notYet(x)){toast(t('availOn',day(x.due)));return}form(x.title,[{id:'d',label:t('doneDate'),type:'date',value:today(),min:x.due,max:today(),req:1}],async v=>{await upd('tasks',id,{done_at:v.d,done_by:me().id});await post('sysDone',me().display_name,x.title)})},
  takeTask:id=>{const x=task(id);return act(async()=>{await upd('tasks',id,{who_member:me().id});await post('sysTake',me().display_name,x.title)},t('saved'))},
@@ -402,7 +435,7 @@ const A={
  delMsg:id=>act(()=>del('messages',id),t('deleted')),
  delDoc:id=>{const x=D.documents.find(q=>q.id===id);return act(async()=>{if(x.storage_path)await must(db.storage.from('documents').remove([x.storage_path]));await del('documents',id)},t('deleted'))},
  openDoc:async id=>{if(DEMO){toast(t('demoNo'));return}const x=D.documents.find(q=>q.id===id),w=window.open('','_blank');try{await rpc('log_document_open',{p_doc:id});const r=await must(db.storage.from('documents').createSignedUrl(x.storage_path,60));if(w)w.location=r.signedUrl;else location.href=r.signedUrl}catch(e){if(w)w.close();toast(errText(e))}},
- filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},seeLate:()=>{taskWho=null;taskFilter='late';view='tasks';render()},
+ filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},installApp:async()=>{if(!installEvt)return;installEvt.prompt();try{const r=await installEvt.userChoice;if(r&&r.outcome!=='accepted')store.set('vl-install-snooze',String(Date.now()+30*864e5))}catch(e){}installEvt=null;render(true)},installLater:()=>{store.set('vl-install-snooze',String(Date.now()+30*864e5));render(true)},joinedOk:()=>{store.del('vl-joined');render(true)},auditMoreBtn:()=>{auditN+=30;refreshAudit()},auditReset:()=>{auditF={who:'',act:'',from:'',to:''};auditN=30;refreshAudit()},seeLate:()=>{taskWho=null;taskFilter='late';view='tasks';render()},
  tf:id=>{taskFilter=id;render(true)},tw:id=>{taskWho=id||null;render(true)},mf:id=>{msgFilter=id;render(true)},jf:id=>{jFilter=id;render(true)},vf:id=>{vFilter=id;render(true)},pickDay:id=>{selDate=id;render(true)},
  calPrev:()=>{calM--;if(calM<0){calM=11;calY--}render(true)},calNext:()=>{calM++;if(calM>11){calM=0;calY++}render(true)},
  star:id=>{const m=D.messages.find(q=>q.id===id);return act(()=>upd('messages',id,{important:!m.important}))},
@@ -439,7 +472,7 @@ const A={
  confirmRep:()=>act(()=>rpc('confirm_representation',{p_circle:cid}),t('saved')),
  endRep:()=>act(()=>rpc('end_representation',{p_circle:cid}),t('saved')),
  delCircle:()=>{if(DEMO){toast(t('demoNo'));return}const dlg=form;dlg(t('delCircle'),[{id:'c',label:t('delCircleHelp'),req:1}],async v=>{if(v.c!==D.circle.person_name)throw{message:'confirm_mismatch'};const paths=D.documents.filter(x=>x.storage_path).map(x=>x.storage_path);if(paths.length)await must(db.storage.from('documents').remove(paths));await rpc('delete_circle',{p_circle:cid,p_confirm:v.c});store.del('cc-circle');await loadMemberships();view='home'})},
- exportData:()=>{if(DEMO){toast(t('demoNo'));return}const {invites,audit,...rest}=D;const blob=new Blob([JSON.stringify(rest,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='circlecare-'+today()+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)},
+ exportData:()=>{if(DEMO){toast(t('demoNo'));return}const {invites,audit,...rest}=D;const blob=new Blob([JSON.stringify(rest,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='vrylive-'+today()+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)},
  hideTips:()=>{store.set('cc-tips','0');render(true)},
  giveDose:id=>{const [m,time]=id.split('|');return act(()=>ins('med_logs',{med_id:m,date:today(),time,status:'given',given_by:me().id,given_at:nowHM()}),t('saved'))},
  skipDose:id=>{const [m,time]=id.split('|');return act(()=>ins('med_logs',{med_id:m,date:today(),time,status:'skipped',given_by:me().id,given_at:nowHM()}),t('saved'))},
@@ -504,6 +537,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
  const c=e.target.dataset.change;if(!c)return;const id=e.target.dataset.id,v=e.target.value;
  if(c==='demoUser'){DEMO.setUser(v);session=DEMO.session();act(async()=>{await loadMemberships()});return}
+ if(c==='auditWho'||c==='auditAct'||c==='auditFrom'||c==='auditTo'){auditF[{auditWho:'who',auditAct:'act',auditFrom:'from',auditTo:'to'}[c]]=v;auditN=30;refreshAudit();return}
  if(c==='medGiver'){act(()=>upd('meds',id,{giver:v||null}),t('saved'));return}
  if(c==='assign'){const x=task(id),m=member(v);act(async()=>{await upd('tasks',id,{who_member:v||null});if(m)await post('sysAssign',m.display_name,x.title)},t('saved'))}
  if(c==='role')act(()=>rpc('set_member_role',{p_member:id,p_role:v}),t('saved'));
@@ -551,5 +585,6 @@ async function boot(){
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
  setInterval(()=>{if(!document.hidden)refresh()},60000);
 }
+if('serviceWorker' in navigator&&!DEMO&&location.protocol==='https:'){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
 boot();
 })();
