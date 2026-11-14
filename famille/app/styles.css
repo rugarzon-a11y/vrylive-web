@@ -227,3 +227,41 @@ input[type=checkbox]{width:24px;height:24px;min-height:0;flex:none;margin-top:2p
 .circle-switch{max-width:220px}
 button[disabled]{opacity:.6;cursor:wait}
 a{color:var(--accent)}
+
+/* ===== Tareas atrasadas ===== */
+.row.late{box-shadow:inset 4px 0 0 var(--late);padding-left:12px}
+.row.late .title{color:var(--late)}
+.alert-late{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#FBE4E2;color:var(--late);border:2px solid var(--late);border-radius:12px;padding:12px 14px;margin:12px 0}
+.alert-late svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;flex:none}
+.alert-late b{flex:1;min-width:10ch;font-size:1.1rem}
+.check:disabled{opacity:.45;cursor:not-allowed}
+.msgact{display:flex;gap:4px;flex-wrap:wrap}
+
+/* ===== Tutorial inicial ===== */
+dialog.tour{width:min(440px,calc(100vw - 24px))}
+.tour-in{padding:26px 22px 20px;display:flex;flex-direction:column;gap:12px;text-align:center;align-items:center}
+.tour-n{color:var(--muted);font-weight:700;font-size:.95rem}
+.tour-ic{width:84px;height:84px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;background:var(--ground);border-radius:24px;padding:14px}
+.tour-in h2{font-size:1.5rem}
+.tour-in p{font-size:1.1rem;line-height:1.5}
+.tour-dots{display:flex;gap:8px}
+.tour-dots span{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.tour-dots span.on{background:var(--accent)}
+.tour-in .actions{display:flex;gap:10px;width:100%;justify-content:space-between;margin-top:6px}
+.tour-in .actions .btn{flex:1}
+
+/* ===== Accesibilidad en el celular (personas mayores) ===== */
+@media (max-width:820px){
+  body{font-size:19px}
+  .meta{font-size:1rem}
+  .tag{font-size:.9rem;padding:3px 9px}
+  .btn,.btn.small{min-height:48px;font-size:1rem}
+  .mini,.star,.linkbtn{min-height:48px;min-width:48px;font-size:1rem}
+  .check{width:48px;height:48px}
+  .note,.empty{font-size:1rem}
+  .cal span{font-size:.92rem}
+  .cal-legend{font-size:.95rem}
+  select,input,textarea{font-size:1.05rem;min-height:48px}
+  nav.main button{font-size:1rem}
+}
+@media (prefers-contrast:more){:root{--muted:#3E3858;--line:#9C97B5}}

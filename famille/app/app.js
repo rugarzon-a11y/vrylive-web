@@ -79,7 +79,7 @@ const upd=(tbl,id,row)=>must(db.from(tbl).update(row).eq('id',id));
 const del=(tbl,id)=>must(db.from(tbl).delete().eq('id',id));
 const post=(key,who,what)=>ins('messages',{author:me().id,sys_key:key,sys_who:who,sys_what:what||null});
 
-function errText(e){const m=(e&&e.message)||'';if(m==='file')return t('e_file');if(m==='times')return t('e_times');for(const k of ['only_responsible','last_coord','person_exists','needs_other_member','already_member','invite_invalid','confirm_mismatch']){if(m.includes(k))return t('e_'+k)}return t('genericErr')}
+function errText(e){const m=(e&&e.message)||'';if(m==='file')return t('e_file');if(m==='times')return t('e_times');for(const k of ['not_yet','only_responsible','last_coord','person_exists','needs_other_member','already_member','invite_invalid','confirm_mismatch']){if(m.includes(k))return t('e_'+k)}return t('genericErr')}
 async function act(fn,okMsg){try{await fn();await load();render(true);if(okMsg)toast(okMsg);return true}catch(e){console.error(e);toast(errText(e));return false}}
 
 // ===== Componentes =====
@@ -96,9 +96,10 @@ function ring(){
   const desc=parts.map(p=>p.name+': '+p.n).join(', ');
   return `<svg viewBox="0 0 320 320" role="img" aria-label="${esc(t('openTasks')+'. '+desc)}">${out}${b.join('')}<text x="160" y="148" text-anchor="middle" fill="#fff" font-family="var(--display)" font-weight="800" font-size="29">${esc(firstName().slice(0,14))}</text><text x="160" y="187" text-anchor="middle" fill="#fff" font-size="33" font-weight="700">${o.length}</text><text x="160" y="209" text-anchor="middle" fill="#D8D3EE" font-size="15">${esc(t('openTasks'))}</text></svg>`;
 }
-function taskMeta(x){return `<div class="meta"><span>${esc(t('due2',day(x.due)))}</span>${isLate(x)?`<span class="tag late">${t('late')}</span>`:''}${x.priority==='high'?`<span class="tag high">${t('highTag')}</span>`:''}${!x.who_member?`<span class="tag yolk">${t('unassigned')}</span>`:''}</div>`}
+function taskMeta(x){return `<div class="meta"><span>${esc(t('due2',day(x.due)))}</span>${notYet(x)&&x.who_member===(me()||{}).id?`<span class="tag plain">${esc(t('availOn',day(x.due)))}</span>`:''}${isLate(x)?`<span class="tag late">${t('late')}</span>`:''}${x.priority==='high'?`<span class="tag high">${t('highTag')}</span>`:''}${!x.who_member?`<span class="tag yolk">${t('unassigned')}</span>`:''}</div>`}
 function eventRow(e,showDate,canDel){const m=member(e.who_member);return `<li class="row wrap-sm">${av(e.who_member)}<div class="grow"><div class="title">${esc(e.title)}</div><div class="meta"><span>${showDate?esc(day(e.date))+', ':''}${hm(e.time)}</span><span>${t(e.type)}</span>${m?`<span>${esc(m.display_name)}</span>`:`<span class="tag yolk">${t('noCompanion')}</span>`}</div></div>${!m&&canEdit()?`<button class="btn small ghost" data-act="takeEvent" data-id="${e.id}">${t('take')}</button>`:''}${canDel&&canEdit()?`<button class="mini" data-act="delEvent" data-id="${e.id}">${t('del')}</button>`:''}</li>`}
-function taskRow(x,canDel){return `<li class="row wrap-sm${x.done_at?' done':''}"><button class="check" data-act="toggle" data-id="${x.id}" aria-pressed="${!!x.done_at}" aria-label="${esc(t('markDone',x.title))}"${canEdit()&&x.who_member===me().id?'':' disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg></button><div class="grow"><div class="title">${esc(x.title)}</div>${taskMeta(x)}</div>${canEdit()&&!x.done_at?`<select data-change="assign" data-id="${x.id}" aria-label="${esc(t('assignTo')+': '+x.title)}">${opts(memOpts(),x.who_member||'')}</select>`:av(x.who_member,1)}${canDel===true&&canEdit()?`<button class="mini" data-act="delTask" data-id="${x.id}">${t('del')}</button>`:''}</li>`}
+const notYet=x=>!x.done_at&&x.due>today();
+function taskRow(x,canDel){return `<li class="row wrap-sm${x.done_at?' done':''}${isLate(x)?' late':''}"><button class="check" data-act="toggle" data-id="${x.id}" aria-pressed="${!!x.done_at}" aria-label="${esc(t('markDone',x.title)+(notYet(x)?'. '+t('availOn',day(x.due)):''))}"${canEdit()&&x.who_member===me().id&&!notYet(x)?'':' disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg></button><div class="grow"><div class="title">${esc(x.title)}</div>${taskMeta(x)}</div>${canEdit()&&!x.done_at?`<select data-change="assign" data-id="${x.id}" aria-label="${esc(t('assignTo')+': '+x.title)}">${opts(memOpts(),x.who_member||'')}</select>`:av(x.who_member,1)}${canDel===true&&canEdit()?`<button class="mini" data-act="delTask" data-id="${x.id}">${t('del')}</button>`:''}</li>`}
 function head(k,sub,action){return `<div class="head"><div><h1>${t(k)}</h1>${sub?`<p>${esc(sub)}</p>`:''}</div>${action||''}</div>`}
 function block(title,rows){return `<section class="sheet"><h2>${esc(title)}</h2>${rows.length?`<ul>${rows.join('')}</ul>`:`<p class="empty">${t('none')}</p>`}</section>`}
 function docTag(x){if(!x.exp)return '';const lbl=esc(t('expiresOn',fmt(x.exp,{day:'numeric',month:'short',year:'numeric'})));if(x.exp<today())return `<span class="tag late">${t('expired')}</span>`;return x.exp<=d(30)?`<span class="tag yolk">${lbl}</span>`:`<span>${lbl}</span>`}
@@ -184,6 +185,7 @@ home(){
   return `<section class="hero"><div>${ring()}</div><div><h1>${esc(t('hello',me().display_name))}</h1><p class="sub">${esc(t('circleOf',firstName()))}</p>
   <div class="share">${assigned.map(({m,n})=>`<button data-act="filterWho" data-id="${m.id}">${av(m.id)}<span><b>${esc(m.display_name)}</b><small>${esc(m.city||'')}</small></span><span>${esc(nl(n))}</span></button>`).join('')}${un?`<button data-act="filterOpen">${av(null)}<span><b>${t('unassigned')}</b></span><span>${esc(nl(un))}</span></button>`:''}</div>
   ${over?`<p class="warn-line">${esc(t('overload',top.m.display_name,top.n,o.length))}</p>`:''}</div></section>
+  ${lateT.length?`<section class="alert-late" role="status"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg><b>${esc(lateT.length===1?t('lateBanner1'):t('lateBanner',String(lateT.length)))}</b><button class="btn small" data-act="seeLate">${t('see')}</button></section>`:''}
   ${D.members.length===1&&isCoord()?`<section class="callout"><b>${t('inviteFirst')}</b><button class="btn small" data-act="invite">${t('invite')}</button></section>`:''}
   ${demoTips()}<div class="cols"><section class="sheet"><h2>${t('today')}</h2>${todayE.length+todayT.length+dNext.length?`<ul>${todayE.map(e=>eventRow(e)).join('')}${dNext.map(doseRow).join('')}${todayT.map(x=>taskRow(x)).join('')}</ul>`:`<p class="empty">${t('nothingToday')}</p>`}</section>
   <section class="sheet"><h2>${t('attention')}</h2>${att.length?`<ul>${att.join('')}</ul>`:`<p class="empty">${t('allClear')}</p>`}</section></div>`;
@@ -211,7 +213,7 @@ tasks(){
 },
 messages(){
   const l=msgFilter==='imp'?D.messages.filter(m=>m.important):D.messages;
-  return head('messages')+`<div class="chips">${[['all','mAll'],['imp','mImp']].map(([v,k])=>`<button data-act="mf" data-id="${v}" aria-pressed="${msgFilter===v}">${t(k)}</button>`).join('')}</div><section class="sheet">${l.length?`<ul>${l.map(m=>{const sys=!!m.sys_key,a=member(m.author),s=stamp(m.created_at);return `<li class="msg${m.important?' important':''}">${sys?'<span class="av sm sys" aria-hidden="true">CC</span>':av(m.author,1)}<div class="grow bubble"><div class="meta"><b style="color:var(--ink)">${sys?t('system'):esc(a?a.display_name:'')}</b><span>${esc(day(s.date))}, ${s.time}</span>${m.important?`<span class="tag yolk">${t('important')}</span>`:''}</div><p style="overflow-wrap:anywhere">${esc(sys?t(m.sys_key,m.sys_who,m.sys_what||''):m.body)}</p>${canWrite()?`<button class="star" data-act="star" data-id="${m.id}">${m.important?t('unmarkImp'):t('markImp')}</button>`:''}</div></li>`}).join('')}</ul>`:`<p class="empty">${t('emptyList')}</p>`}${canWrite()?`<form class="composer" id="composer"><textarea id="msg-text" aria-label="${t('compose')}" placeholder="${t('compose')}" required></textarea><button class="btn">${t('send')}</button></form>`:`<p class="empty">${t('readOnly')}</p>`}</section>`;
+  return head('messages')+`<div class="chips">${[['all','mAll'],['imp','mImp']].map(([v,k])=>`<button data-act="mf" data-id="${v}" aria-pressed="${msgFilter===v}">${t(k)}</button>`).join('')}</div><section class="sheet">${l.length?`<ul>${l.map(m=>{const sys=!!m.sys_key,a=member(m.author),s=stamp(m.created_at);return `<li class="msg${m.important?' important':''}">${sys?'<span class="av sm sys" aria-hidden="true">CC</span>':av(m.author,1)}<div class="grow bubble"><div class="meta"><b style="color:var(--ink)">${sys?t('system'):esc(a?a.display_name:'')}</b><span>${esc(day(s.date))}, ${s.time}</span>${m.important?`<span class="tag yolk">${t('important')}</span>`:''}</div><p style="overflow-wrap:anywhere">${esc(sys?t(m.sys_key,m.sys_who,m.sys_what||''):m.body)}</p><div class="msgact">${canWrite()?`<button class="star" data-act="star" data-id="${m.id}">${m.important?t('unmarkImp'):t('markImp')}</button>`:''}${!sys&&m.author===me().id?`<button class="star" data-act="delMsg" data-id="${m.id}">${t('del')}</button>`:''}</div></div></li>`}).join('')}</ul>`:`<p class="empty">${t('emptyList')}</p>`}${canWrite()?`<form class="composer" id="composer"><textarea id="msg-text" aria-label="${t('compose')}" placeholder="${t('compose')}" required></textarea><button class="btn">${t('send')}</button></form>`:`<p class="empty">${t('readOnly')}</p>`}</section>`;
 },
 voice(){
   const all=voicesSorted(),l=vFilter==='all'?all:all.filter(v=>v.status===vFilter);
@@ -249,7 +251,7 @@ profile(){
   const canEnd=isCoord()||(isPerson()&&c.rep_basis==='family_agreement');
   const canConfirm=c.capacity_status==='pending'&&canEdit()&&me().id!==c.rep_proposed_by&&me().id!==c.rep_member_id;
   const cap=c.capacity_status==='autonomous'?`<p style="padding-bottom:8px">${esc(t('capAuto',firstName()))}</p>${isCoord()?`<p style="padding-bottom:10px"><button class="btn small ghost" data-act="proposeRep">${t('capRegister')}</button></p>`:''}`:`<p style="padding-bottom:6px"><span class="tag ${c.capacity_status==='pending'?'yolk':'plain'}">${c.capacity_status==='pending'?t('capPending'):t('capActive')}</span></p>${capDetails}<div class="vactions" style="margin-bottom:10px">${canConfirm?`<button class="btn small" data-act="confirmRep">${t('capConfirm')}</button>`:''}${isCoord()&&c.capacity_status==='represented'&&c.rep_basis==='family_agreement'?`<button class="btn small" data-act="proposeRep">${t('capCourt')}</button>`:''}${canEnd?`<button class="btn small ghost" data-act="endRep">${c.capacity_status==='pending'?t('capCancel'):t('capEnd')}</button>`:''}</div>`;
-  return `<div class="head"><div><h1>${esc(c.person_name)}</h1><p>${c.birth_date?esc(t('bornOn',longDate(c.birth_date))+' ('+t('years',age(c.birth_date))+')'):''}${c.birth_date&&c.city?', ':''}${esc(c.city||'')}</p></div>${isCoord()?`<div class="vactions"><button class="btn" data-act="invite">${t('invite')}</button><button class="btn ghost" data-act="editPerson">${t('editPerson')}</button></div>`:''}</div>
+  return `<div class="head"><div><h1>${esc(c.person_name)}</h1><p>${c.birth_date?esc(t('bornOn',longDate(c.birth_date))+' ('+t('years',age(c.birth_date))+')'):''}${c.birth_date&&c.city?', ':''}${esc(c.city||'')}</p></div><div class="vactions">${isCoord()?`<button class="btn" data-act="invite">${t('invite')}</button><button class="btn ghost" data-act="editPerson">${t('editPerson')}</button>`:''}<button class="btn ghost" data-act="pdf">${t('pdfBtn')}</button><button class="btn ghost" data-act="signOut">${t('signOut')}</button></div></div>
   ${isCoord()?'':`<p class="note">${t('inviteOnlyCoord')}</p>`}<div class="cols"><section class="sheet"><h2>${t('needs')}</h2>${D.needs.length?`<ul class="facts">${D.needs.map(n=>`<li class="line"><span>${esc(n.body)}</span>${canWrite()?`<button class="mini" data-act="delNeed" data-id="${n.id}">${t('del')}</button>`:''}</li>`).join('')}</ul>`:`<p class="empty">${t('emptyList')}</p>`}${canWrite()?`<p style="padding:8px 0"><button class="btn small ghost" data-act="newNeed">${t('addNeed')}</button></p>`:''}</section>
   <section class="sheet"><h2>${t('family')}</h2><ul>${D.members.map(m=>`<li class="row wrap-sm">${av(m.id)}<div class="grow"><div class="title">${esc(m.display_name)}</div><div class="meta"><span>${esc(m.relation||'')}</span><span>${esc(m.city||'')}</span></div></div>${isCoord()&&m.id!==me().id&&m.role!=='person'?`<select data-change="role" data-id="${m.id}" aria-label="${esc(t('role')+': '+m.display_name)}">${opts([['coord',t('coord')],['fam',t('fam')],['viewer',t('viewer')]],m.role)}</select>`:`<span class="tag plain">${roleName(m.role)}</span>`}${isCoord()&&m.id!==me().id?`<button class="mini" data-act="removeMember" data-id="${m.id}">${t('remove')}</button>`:''}</li>`).join('')}</ul><p class="note" style="padding:8px 0">${t('permHelp')}</p>
   ${pendInv.length?`<h3 style="font-size:1rem;padding:6px 0;color:var(--muted)">${t('pendingInv')}</h3><ul>${pendInv.map(i=>`<li class="row wrap-sm"><div class="grow"><div class="title">${esc(i.display_name)}</div></div><button class="btn small ghost" data-act="showInvite" data-id="${i.id}">${t('see')}</button><button class="mini" data-act="revokeInv" data-id="${i.id}">${t('revoke')}</button></li>`).join('')}</ul>`:''}
@@ -282,7 +284,7 @@ meeting(){
   <section class="sheet"><h2>${t('agenda')}</h2>${items.length?`<ul>${items.map(row).join('')}</ul>`:`<p class="empty">${t('emptyAgenda')}</p>`}${canEdit()?`<div class="callout" style="background:var(--ground)"><span class="note">${t('closeHelp')}</span><button class="btn small" data-act="closeMeeting">${t('closeMeeting')}</button></div>`:''}</section>
   <section class="sheet"><h2>${t('pastMeetings')}</h2>${past.length?past.map(m=>{const dec=pts.filter(p=>p.meeting_id===m.id&&p.decision);return `<h3 style="font-size:1rem;padding:10px 0 2px">${esc(t('minutesOf',fmt(m.date,{day:'numeric',month:'long',year:'numeric'})))}</h3><ul class="facts">${dec.map(p=>`<li>${esc(p.decision)}${p.decision_who&&member(p.decision_who)?' ('+esc(member(p.decision_who).display_name)+')':''}</li>`).join('')}</ul>`}).join(''):`<p class="empty">${t('emptyList')}</p>`}</section>`;
 },
-more(){return `<div class="head"><h1>${t('more')}</h1></div><section class="sheet"><ul class="morelist">${navItems().filter(n=>n[1]).map(([k,,p])=>`<li><button data-nav="${k}">${ic(p)}${t(k)}</button></li>`).join('')}</ul></section>`}
+more(){return `<div class="head"><h1>${t('more')}</h1></div><section class="sheet"><ul class="morelist">${navItems().filter(n=>n[1]).map(([k,,p])=>`<li><button data-nav="${k}">${ic(p)}${t(k)}</button></li>`).join('')}<li><button data-act="pdf">${ic('M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7')}${t('pdfBtn')}</button></li><li><button data-act="signOut">${ic('M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10')}${t('signOut')}</button></li></ul></section>`}
 };
 function helpLines(){const r=D.circle.region,c=[[t('line988'),'988'],[t('lineEm'),'911']];if(r==='qc')return [[t('lineAid'),'1 855 852-7784'],[t('lineSoc'),t('linePhone811')],...c];if(r==='us')return [[t('lineElder'),'1 800 677-1116'],[t('line211'),'211'],...c];return [[t('line211'),'211'],...c]}
 const regionOpts=()=>[['qc',t('r_qc')],['ca',t('r_ca')],['us',t('r_us')]];
@@ -309,6 +311,18 @@ function createView(){return `<div class="top"><div class="logo">${LOGO}Vrylive<
  <label for="c-me">${t('yourName')}<input id="c-me" required maxlength="80"></label><label for="c-r">${t('yourRel')}<input id="c-r" maxlength="60"></label><label for="c-mc">${t('yourCity')}<input id="c-mc" maxlength="80"></label>
  <button class="btn">${t('create')}</button><button type="button" class="linkbtn" data-act="signOut">${t('signOut')}</button></form>`}
 
+function tourDone(){return store.get('vl-tour-done')==='1'||!!(session&&session.user&&session.user.user_metadata&&session.user.user_metadata.tour_done)}
+let tourStep=0;
+function showTour(){
+ if(tourDone()||document.getElementById('tour'))return;
+ const dl=document.createElement('dialog');dl.id='tour';dl.className='tour';dl.setAttribute('aria-labelledby','tour-h');document.body.appendChild(dl);
+ const icons=['M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6','M9 8a3 3 0 1 0 0 .1M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M17 8v6M14 11h6','M5 5h14v15H5zM8.5 12l2.5 2.5 4.5-5'];
+ const end=()=>{store.set('vl-tour-done','1');if(!DEMO&&session){db.auth.updateUser({data:{tour_done:true}}).catch(()=>{})}dl.close();dl.remove()};
+ const draw=()=>{const i=tourStep;dl.innerHTML=`<div class="tour-in"><p class="tour-n">${esc(t('tourStep',String(i+1),'3'))}</p><svg class="tour-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[i]}"/></svg><h2 id="tour-h">${t('tour'+(i+1)+'T')}</h2><p>${t('tour'+(i+1)+'P')}</p><div class="tour-dots" aria-hidden="true">${[0,1,2].map(k=>`<span class="${k===i?'on':''}"></span>`).join('')}</div><div class="actions"><button type="button" class="btn ghost" id="tour-skip">${t('tourSkip')}</button><button type="button" class="btn" id="tour-next">${i<2?t('tourNext'):t('tourStart')}</button></div></div>`;
+  document.getElementById('tour-skip').onclick=end;document.getElementById('tour-next').onclick=()=>{if(tourStep<2){tourStep++;draw()}else end()};document.getElementById('tour-next').focus()};
+ dl.addEventListener('cancel',e=>{e.preventDefault();end()});
+ tourStep=0;draw();dl.showModal();
+}
 function render(keep){
   const y=window.scrollY,root=document.getElementById('root'),nav=document.getElementById('nav'),app=document.getElementById('app');
   document.documentElement.lang=HTML[li];
@@ -319,7 +333,8 @@ function render(keep){
   else if(!session)solo=authView();
   else if(pendingInvite)solo=inviteView();
   else if(!cid||!D)solo=createView();
-  if(solo!==null){app.className='app solo';nav.innerHTML='';root.innerHTML=solo;window.scrollTo(0,0);return}
+  if(solo!==null){app.className='app solo';nav.innerHTML='';root.innerHTML=solo;window.scrollTo(0,0);if(session&&!recovery&&!pendingInvite)setTimeout(showTour,0);return}
+  if(session)setTimeout(showTour,0);
   if(!isPerson()||view!=='foryou'){}else view='home';
   app.className='app';
   const active=view;
@@ -333,7 +348,7 @@ const busy=()=>document.getElementById('sheet').open||(document.getElementById('
 
 function form(title,fields,onSave,note){
   const dlg=document.getElementById('sheet');
-  dlg.innerHTML=`<form id="sheet-form"><h2>${esc(title)}</h2>${fields.map(f=>`<label for="f-${f.id}">${esc(f.label)}${f.type==='select'?`<select id="f-${f.id}">${opts(f.options,f.value==null?'':f.value)}</select>`:f.type==='textarea'?`<textarea id="f-${f.id}" rows="3"${f.req?' required':''}></textarea>${f.dictate?`<span class="dict"><button type="button" class="btn small ghost" id="mic-${f.id}" aria-pressed="false">${t('dictate')}</button><span class="note" id="micmsg-${f.id}" aria-live="polite">${t('micPrivacy')}</span></span>`:''}`:f.type==='file'?`<input id="f-${f.id}" type="file" accept="application/pdf,image/jpeg,image/png">`:`<input id="f-${f.id}" type="${f.type||'text'}" value="${esc(f.value==null?'':f.value)}"${f.req?' required':''}${f.max?` max="${f.max}"`:''}>`}</label>`).join('')}${note?`<p class="note">${esc(note)}</p>`:''}<div class="actions"><button type="button" class="btn ghost" id="sheet-cancel">${t('cancel')}</button><button class="btn" id="sheet-save">${t('save')}</button></div></form>`;
+  dlg.innerHTML=`<form id="sheet-form"><h2>${esc(title)}</h2>${fields.map(f=>`<label for="f-${f.id}">${esc(f.label)}${f.type==='select'?`<select id="f-${f.id}">${opts(f.options,f.value==null?'':f.value)}</select>`:f.type==='textarea'?`<textarea id="f-${f.id}" rows="3"${f.req?' required':''}></textarea>${f.dictate?`<span class="dict"><button type="button" class="btn small ghost" id="mic-${f.id}" aria-pressed="false">${t('dictate')}</button><span class="note" id="micmsg-${f.id}" aria-live="polite">${t('micPrivacy')}</span></span>`:''}`:f.type==='file'?`<input id="f-${f.id}" type="file" accept="application/pdf,image/jpeg,image/png">`:`<input id="f-${f.id}" type="${f.type||'text'}" value="${esc(f.value==null?'':f.value)}"${f.req?' required':''}${f.max?` max="${f.max}"`:''}${f.min?` min="${f.min}"`:''}>`}</label>`).join('')}${note?`<p class="note">${esc(note)}</p>`:''}<div class="actions"><button type="button" class="btn ghost" id="sheet-cancel">${t('cancel')}</button><button class="btn" id="sheet-save">${t('save')}</button></div></form>`;
   document.getElementById('sheet-cancel').onclick=()=>dlg.close();
   document.getElementById('sheet-form').onsubmit=async e=>{e.preventDefault();const v={};fields.forEach(f=>{const el=document.getElementById('f-'+f.id);v[f.id]=f.type==='file'?el.files[0]:el.value.trim()});const b=document.getElementById('sheet-save');b.disabled=true;
     let after;const fine=await act(async()=>{after=await onSave(v)},t('saved'));if(fine){dlg.close();if(typeof after==='function')after()}else b.disabled=false};
@@ -367,16 +382,18 @@ const task=id=>D.tasks.find(q=>q.id===id);
 const A={
  lang:id=>{li=+id;store.set('cc-lang',id);if(DEMO&&session)return act(async()=>{});render(true)},
  mode:id=>{authMode=id;authMsg='';render()},
- signOut:async()=>{if(DEMO){toast(t('demoNo'));return}await db.auth.signOut();session=null;D=null;cid=null;memberships=[];store.del('cc-circle');view='home';render()},
+ signOut:async()=>{if(DEMO){toast(t('demoNo'));return}try{await db.auth.signOut({scope:'local'})}catch(e){}try{Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))}catch(e){}store.del('cc-circle');session=null;D=null;cid=null;memberships=[];location.replace(location.pathname)},
  acceptInvite:async()=>{try{const c=await rpc('accept_invite',{p_token:pendingInvite});clearInvite();await loadMemberships();cid=c;store.set('cc-circle',c);await load();view='home';render()}catch(e){toast(errText(e));clearInvite();render()}},
  declineInvite:()=>{clearInvite();render()},
- toggle:id=>{const x=task(id);if(x.done_at)return act(()=>upd('tasks',id,{done_at:null,done_by:null}));form(x.title,[{id:'d',label:t('doneDate'),type:'date',value:today(),max:today(),req:1}],async v=>{await upd('tasks',id,{done_at:v.d,done_by:me().id});await post('sysDone',me().display_name,x.title)})},
+ toggle:id=>{const x=task(id);if(x.done_at)return act(()=>upd('tasks',id,{done_at:null,done_by:null}));if(notYet(x)){toast(t('availOn',day(x.due)));return}form(x.title,[{id:'d',label:t('doneDate'),type:'date',value:today(),min:x.due,max:today(),req:1}],async v=>{await upd('tasks',id,{done_at:v.d,done_by:me().id});await post('sysDone',me().display_name,x.title)})},
  takeTask:id=>{const x=task(id);return act(async()=>{await upd('tasks',id,{who_member:me().id});await post('sysTake',me().display_name,x.title)},t('saved'))},
  takeEvent:id=>{const x=D.events.find(q=>q.id===id);return act(async()=>{await upd('events',id,{who_member:me().id});await post('sysTake',me().display_name,x.title)},t('saved'))},
  delEvent:id=>act(()=>del('events',id),t('deleted')),delTask:id=>act(()=>del('tasks',id),t('deleted')),delContact:id=>act(()=>del('contacts',id),t('deleted')),delPractical:id=>act(()=>del('practical',id),t('deleted')),delNeed:id=>act(()=>del('needs',id),t('deleted')),delWish:id=>act(()=>del('wishes',id),t('deleted')),delVoice:id=>act(()=>del('voices',id),t('deleted')),revokeInv:id=>act(()=>del('invites',id),t('deleted')),
+ pdf:()=>act(makePdf,t('pdfDone')),
+ delMsg:id=>act(()=>del('messages',id),t('deleted')),
  delDoc:id=>{const x=D.documents.find(q=>q.id===id);return act(async()=>{if(x.storage_path)await must(db.storage.from('documents').remove([x.storage_path]));await del('documents',id)},t('deleted'))},
  openDoc:async id=>{if(DEMO){toast(t('demoNo'));return}const x=D.documents.find(q=>q.id===id),w=window.open('','_blank');try{await rpc('log_document_open',{p_doc:id});const r=await must(db.storage.from('documents').createSignedUrl(x.storage_path,60));if(w)w.location=r.signedUrl;else location.href=r.signedUrl}catch(e){if(w)w.close();toast(errText(e))}},
- filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},
+ filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},seeLate:()=>{taskWho=null;taskFilter='late';view='tasks';render()},
  tf:id=>{taskFilter=id;render(true)},tw:id=>{taskWho=id||null;render(true)},mf:id=>{msgFilter=id;render(true)},jf:id=>{jFilter=id;render(true)},vf:id=>{vFilter=id;render(true)},pickDay:id=>{selDate=id;render(true)},
  calPrev:()=>{calM--;if(calM<0){calM=11;calY--}render(true)},calNext:()=>{calM++;if(calM>11){calM=0;calY++}render(true)},
  star:id=>{const m=D.messages.find(q=>q.id===id);return act(()=>upd('messages',id,{important:!m.important}))},
@@ -433,7 +450,31 @@ const A={
  copy:()=>{const w=weekData(),lines=[t('summary')+' - '+D.circle.person_name,'',t('doneList')+':',...w.done.map(x=>'- '+x.title),'',t('pendList')+':',...w.pend.map(x=>'- '+x.title+' ('+day(x.due)+')'),'',t('apptWeek')+':',...w.ev.map(e=>'- '+day(e.date)+' '+hm(e.time)+': '+e.title),'',t('eventsLog')+':',...w.log.map(j=>'- '+day(j.date)+': '+j.body),'',t('voiceWeek',firstName())+':',...w.voice.map(v=>'- '+v.body)];copyText(lines.join('\n'),t('copied'))}
 };
 function clearInvite(){pendingInvite=null;invitePreview=null;store.del('cc-invite');if(location.search.includes('invite='))history.replaceState(null,'',location.pathname)}
-const DELS={delEvent:['events','title'],delTask:['tasks','title'],delContact:['contacts','name'],delPractical:['practical','body'],delNeed:['needs','body'],delWish:['wishes','body'],delVoice:['voices','body'],delDoc:['documents','name'],delMed:['meds','name'],revokeInv:['invites','display_name'],removeMember:['members','display_name'],leave:[null,null]};
+function loadPdfLib(){return window.jspdf?Promise.resolve(window.jspdf):new Promise((ok,ko)=>{const sc=document.createElement('script');sc.src='vendor/jspdf.umd.min.js';sc.onload=()=>ok(window.jspdf);sc.onerror=ko;document.head.appendChild(sc)})}
+async function makePdf(){
+ const {jsPDF}=await loadPdfLib(),doc=new jsPDF({unit:'mm',format:'letter'}),W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),M=18;let y=M;
+ const clean=x=>String(x==null?'':x).replace(/[\u2018\u2019]/g,"'").replace(/[\u201C\u201D]/g,'"').replace(/\u2013|\u2014/g,'-').replace(/\u2026/g,'...').replace(/\u202F|\u00A0/g,' ');
+ const need=h=>{if(y+h>H-M){doc.addPage();y=M}};
+ const line=(txt,o={})=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(o.s||11);const ls=doc.splitTextToSize(clean(txt),W-2*M-(o.ind||0));const lh=(o.s||11)*0.45;need(ls.length*lh+1);doc.text(ls,M+(o.ind||0),y+lh*0.8);y+=ls.length*lh+(o.gap==null?1.5:o.gap)};
+ const sec=title=>{y+=4;need(14);doc.setDrawColor(58,54,168);doc.setLineWidth(0.6);doc.line(M,y,W-M,y);y+=2;line(title,{b:1,s:13,gap:2})};
+ const c=D.circle,mn=id=>{const m=member(id);return m?m.display_name:t('unassigned')};
+ line(t('pdfTitle'),{b:1,s:18,gap:3});
+ line(c.person_name+(c.birth_date?' - '+t('bornOn',longDate(c.birth_date))+' ('+t('years',age(c.birth_date))+')':''),{b:1,s:12});
+ line(t('pdfDate',longDate(today())),{s:10,gap:3});
+ sec(t('pdfAppts'));
+ const ev=D.events.filter(e=>e.date>=today()&&e.date<=d(60)).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+ if(ev.length)ev.forEach(e=>line(longDate(e.date)+', '+hm(e.time)+' - '+e.title+(e.who_member?' ('+t('pdfWith',mn(e.who_member))+')':''),{ind:2}));else line(t('pdfNone'),{ind:2});
+ sec(t('pdfTasks'));
+ const tk=open().sort((a,b)=>a.due.localeCompare(b.due));
+ if(tk.length)tk.forEach(x=>line((isLate(x)?'['+t('late')+'] ':'')+x.title+' - '+t('due2',longDate(x.due))+' - '+mn(x.who_member),{ind:2}));else line(t('pdfNone'),{ind:2});
+ sec(t('pdfMeds'));
+ const md=medsActive();
+ if(md.length)md.forEach(m=>{line(m.name+(m.dose?' - '+m.dose:''),{b:1,ind:2,gap:0.5});line(t('pdfTimes',slots(m).join(', '))+(m.giver?' - '+t('pdfGiver',mn(m.giver)):''),{ind:6,gap:0.5});if(m.note)line(m.note,{ind:6,gap:0.5});y+=1.5});else line(t('pdfNone'),{ind:2});
+ y+=6;line(t('pdfFoot'),{s:9});
+ const pages=doc.getNumberOfPages();for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90,83,114);doc.text('Vrylive Famille - '+i+'/'+pages,W-M,H-8,{align:'right'});doc.setTextColor(0)}
+ doc.save('vrylive-'+today()+'.pdf');
+}
+const DELS={delMsg:['messages','body'],delEvent:['events','title'],delTask:['tasks','title'],delContact:['contacts','name'],delPractical:['practical','body'],delNeed:['needs','body'],delWish:['wishes','body'],delVoice:['voices','body'],delDoc:['documents','name'],delMed:['meds','name'],revokeInv:['invites','display_name'],removeMember:['members','display_name'],leave:[null,null]};
 function confirmDel(act,id){
   const [tb,f]=DELS[act],row=tb?(D[tb]||[]).find(r=>r.id===id):null,name=act==='leave'?D.circle.person_name:row?String(row[f]||''):'';
   const head=act==='revokeInv'?'confirmRevokeT':act==='removeMember'?'confirmRemoveT':act==='leave'?'confirmLeaveT':'confirmDelT',btn=act==='revokeInv'?'revoke':act==='removeMember'?'remove':act==='leave'?'leave':'del',note=act==='delDoc'?'confirmDocNote':act==='leave'?'confirmLeaveNote':'confirmNote';
