@@ -91,7 +91,10 @@ T.wishes=wishes.map((b,i)=>({id:'w'+i,circle_id:C,body:b}));
 const mon=(()=>{const x=new Date();x.setDate(x.getDate()-((x.getDay()+6)%7));return x})();
 const wk=n=>{const x=new Date(mon);x.setDate(x.getDate()-7*n);return iso(x)};
 T.moods=[[2,2],[1,3]].map(([n,l])=>({user_id:'u-s',circle_id:C,week_start:wk(n),level:l}));
-T.invites=[];T.audit_log=[];T.notif_prefs=[];
+T.invites=[{id:'inv1',circle_id:C,token:'demoinv1',display_name:'Lucía',relation:'',city:'Laval',role:'fam',contact:'lucia@example.com',lang:'es',accepted_at:null,created_at:at(d(-3)),expires_at:new Date(Date.now()+11*864e5).toISOString()},
+{id:'inv2',circle_id:C,token:'demoinv2',display_name:'Paul',relation:'',city:'Québec',role:'viewer',contact:'418 555-0144',lang:'fr',accepted_at:null,created_at:at(d(-20)),expires_at:new Date(Date.now()-6*864e5).toISOString()},
+{id:'inv3',circle_id:C,token:'demoinv3',display_name:'Camila',relation:'',city:'Gatineau',role:'fam',contact:null,lang:'es',accepted_at:at(d(-40)),created_at:at(d(-41)),expires_at:at(d(-27))}];
+T.audit_log=[];T.notif_prefs=[];T.circle_private=[{circle_id:C,person_phone:'450 555-0100',person_email:null}];
 T.meds=[{id:'md1',circle_id:C,name:['Pastilla de la presión','Comprimé pour la pression','Blood pressure pill'],dose:['1 comprimido','1 comprimé','1 tablet'],times:'08:00',note:['Con el desayuno','Avec le déjeuner','With breakfast'],giver:'p',active:true},
 {id:'md2',circle_id:C,name:['Vitamina D','Vitamine D','Vitamin D'],dose:['1 cápsula','1 capsule','1 capsule'],times:'08:00',note:null,giver:'p',active:true},
 {id:'md3',circle_id:C,name:['Gotas para los ojos','Gouttes pour les yeux','Eye drops'],dose:['1 gota en cada ojo','1 goutte dans chaque œil','1 drop in each eye'],times:'08:00, 20:00',note:null,giver:'s',active:true}];
@@ -107,7 +110,7 @@ const mine=()=>T.circle_members.find(m=>m.user_id===user),circle=()=>T.circles[0
 const isRep=()=>circle().capacity_status==='represented'&&circle().rep_member_id===mine().id;
 const speaks=()=>mine().role==='person'||isRep();
 const seeVoice=v=>{const r=mine().role;if(r==='person'||v.vis==='family')return true;if(v.vis==='member')return v.vis_member===mine().id;return circle().rep_private_access&&isRep()};
-const VIS={notif_prefs:m=>m.user_id===user,voices:seeVoice,voice_replies:r=>seeVoice(T.voices.find(v=>v.id===r.voice_id)),documents:x=>x.vis==='all'||mine().role==='coord'||speaks(),moods:m=>m.user_id===user};
+const VIS={circle_private:()=>mine().role==='coord',notif_prefs:m=>m.user_id===user,voices:seeVoice,voice_replies:r=>seeVoice(T.voices.find(v=>v.id===r.voice_id)),documents:x=>x.vis==='all'||mine().role==='coord'||speaks(),moods:m=>m.user_id===user};
 const lang=v=>Array.isArray(v)?v[window.CC_DEMO.li()]:v;
 const out=r=>{const o={};for(const k in r)o[k]=lang(r[k]);return o};
 const DEF={meeting_points:{decision:null,decision_who:null,decision_due:null},tasks:{minutes:30,done_at:null,done_by:null,relief_member:null,priority:'normal'},messages:{important:false,sys_key:null},voices:{status:'new',via_member:null},documents:{storage_path:null,exp:null}};
@@ -117,6 +120,7 @@ class Q{constructor(t){this.t=t;this.f=[];this.op='select'}
  match(r){return this.f.every(([c,v])=>r[c]===v)}
  run(){const A=T[this.t];
   if(this.op==='insert'){A.push({id:nid(),created_at:new Date().toISOString(),...(DEF[this.t]||{}),...this.p});return null}
+  if(this.op==='upsert'&&this.t==='circle_private'){const e=A.find(m=>m.circle_id===this.p.circle_id);if(e)Object.assign(e,this.p);else A.push({...this.p});return null}
   if(this.op==='upsert'){const e=A.find(m=>m.user_id===this.p.user_id&&m.week_start===this.p.week_start);if(e)e.level=this.p.level;else A.push({...this.p});return null}
   if(this.op==='update'){A.filter(r=>this.match(r)).forEach(r=>Object.assign(r,this.p));return null}
   if(this.op==='delete'){T[this.t]=A.filter(r=>!this.match(r));return null}
@@ -130,7 +134,7 @@ const nm=id=>T.circle_members.find(m=>m.id===id).display_name;
 const clearRep=()=>Object.assign(circle(),{capacity_status:'autonomous',rep_member_id:null,rep_basis:null,rep_date:null,rep_note:null,rep_private_access:false,rep_proposed_by:null});
 const E=m=>{throw new Error(m)};
 const R={
- create_invite:a=>{const token='demo'+nid();T.invites.push({id:nid(),circle_id:C,token,display_name:a.p_name,relation:a.p_relation,city:a.p_city,role:a.p_role,accepted_at:null,expires_at:new Date(Date.now()+14*864e5).toISOString()});return token},
+ create_invite:a=>{const token='demo'+nid();T.invites.push({id:nid(),circle_id:C,token,display_name:a.p_name,relation:a.p_relation,city:a.p_city,role:a.p_role,contact:a.p_contact||null,lang:a.p_lang||'fr',accepted_at:null,created_at:new Date().toISOString(),expires_at:new Date(Date.now()+14*864e5).toISOString()});return token},
  set_member_role:a=>{const m=T.circle_members.find(x=>x.id===a.p_member);if(m.role==='coord'&&a.p_role!=='coord'&&T.circle_members.filter(x=>x.role==='coord').length===1)E('last_coord');m.role=a.p_role},
  remove_member:a=>{T.circle_members=T.circle_members.filter(x=>x.id!==a.p_member);T.tasks.forEach(x=>{if(x.who_member===a.p_member)x.who_member=null})},
  set_voice_status:a=>{T.voices.find(v=>v.id===a.p_voice).status=a.p_status},

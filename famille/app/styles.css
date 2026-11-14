@@ -265,3 +265,10 @@ dialog.tour{width:min(440px,calc(100vw - 24px))}
   nav.main button{font-size:1rem}
 }
 @media (prefers-contrast:more){:root{--muted:#3E3858;--line:#9C97B5}}
+
+/* ===== Contacto e invitaciones ===== */
+.pcontact{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:4px}
+.tag.okt{background:#DFF1E6;color:var(--ok)}
+.sharebtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.sharebtns .btn{flex:1 1 140px;text-align:center;justify-content:center}
+#inv-url{white-space:pre-wrap;overflow-wrap:anywhere}
