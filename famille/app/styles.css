@@ -292,3 +292,8 @@ html.pm body{font-size:21px}
 .person-mode .btn,.person-mode .btn.small{min-height:52px;font-size:1.08rem}
 .person-mode .say button{min-height:84px;font-size:1.15rem}
 .person-mode h1{font-size:2rem}
+
+/* ===== Ayuda ===== */
+.helpsteps{display:grid;gap:14px;padding-left:1.4em;margin:6px 0}
+.helpsteps h3{font-size:1.08rem;margin-bottom:2px}
+.helpsteps p{color:var(--ink)}
