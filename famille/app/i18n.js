@@ -549,5 +549,10 @@ window.CC_S={
 "sysShiftReleased":["{0} ya no puede cubrir: {1}. El relevo vuelve a estar abierto.","{0} ne peut plus couvrir : {1}. La relève est de nouveau ouverte.","{0} can no longer cover: {1}. The relief is open again."],
 "e_shift_hours":["La hora de fin debe ser después de la hora de inicio.","L'heure de fin doit être après l'heure de début.","The end time must be after the start time."],
 "e_shift_taken":["Alguien ya tomó este relevo.","Quelqu'un a déjà pris cette relève.","Someone already took this relief."],
-"e_own_shift":["No puede cubrir su propio relevo.","Vous ne pouvez pas couvrir votre propre relève.","You can't cover your own relief."]
+"e_own_shift":["No puede cubrir su propio relevo.","Vous ne pouvez pas couvrir votre propre relève.","You can't cover your own relief."],
+"myCircles":["Mis círculos","Mes cercles","My circles"],
+"circleCurrent":["Abierto ahora","Ouvert maintenant","Open now"],
+"circleOpen":["Abrir","Ouvrir","Open"],
+"myCirclesNote":["Si cuida a más de una persona (padre, madre, suegros), cree un círculo para cada una. Cada círculo tiene su propia familia, calendario y documentos.","Si vous aidez plus d'une personne (père, mère, beaux-parents), créez un cercle pour chacune. Chaque cercle a sa propre famille, son calendrier et ses documents.","If you care for more than one person (father, mother, in-laws), create a circle for each. Each circle has its own family, calendar and documents."],
+"newCircleBtn":["Crear otro círculo","Créer un autre cercle","Create another circle"]
 };

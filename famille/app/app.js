@@ -29,7 +29,7 @@ let session=null,memberships=[],cid=null,D=null,authMode='login',authMsg='',reco
 let pendingInvite=null,invitePreview=null,inviteChecked=false;
 let view='home',taskFilter='open',taskWho=null,msgFilter='all',jFilter='all',vFilter='all',selDate=today(),calY=new Date().getFullYear(),calM=new Date().getMonth();
 
-let auditN=30,auditF={who:'',act:'',from:'',to:''},auditMore=false;
+let addingCircle=false,auditN=30,auditF={who:'',act:'',from:'',to:''},auditMore=false;
 const AUDIT_GROUPS={insert:['insert'],update:['update'],delete:['delete'],open:['open'],rep:['propose','confirm','end']};
 async function fetchAudit(){
  let qy=db.from('audit_log').select('*').eq('circle_id',cid);
@@ -297,6 +297,7 @@ profile(){
   ${isCoord()?`<p class="note" style="padding:4px 0">${t('invShareNote')}</p><p style="padding:0 0 10px"><button class="btn small ghost" data-act="invite">${t('invite')}</button></p>`:''}</section>
   <section class="sheet"><h2>${t('capT')}</h2>${cap}</section>
   <section class="sheet"><h2>${t('agrT')}</h2><p class="note" style="padding-bottom:8px">${t('agrHelp')}</p>${c.family_agreement?`<p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(c.family_agreement)}</p>${c.family_agreement_date?`<p class="note">${esc(fmt(c.family_agreement_date,{day:'numeric',month:'long',year:'numeric'}))}</p>`:''}`:`<p class="empty">${t('emptyList')}</p>`}${isCoord()?`<p style="padding:8px 0"><button class="btn small ghost" data-act="editAgreement">${t('agrEdit')}</button></p>`:''}</section>
+  ${isPerson()?'':`<section class="sheet"><h2>${t('myCircles')}</h2><ul>${(memberships.length?memberships:[{circle_id:cid,circles:{person_name:D.circle.person_name}}]).map(m=>`<li class="row wrap-sm"><div class="grow"><div class="title">${esc(m.circles.person_name)}</div>${m.circle_id===cid?`<div class="meta"><span class="tag okt">${t('circleCurrent')}</span></div>`:''}</div>${m.circle_id===cid?'':`<button class="btn small ghost" data-act="switchCircle" data-id="${m.circle_id}">${t('circleOpen')}</button>`}</li>`).join('')}</ul><p class="note" style="padding:6px 0">${t('myCirclesNote')}</p><p style="padding:0 0 10px"><button class="btn small ghost" data-act="newCircleBtn">${t('newCircleBtn')}</button></p></section>`}
   ${notifSection()}<section class="sheet"><h2>${t('account')}</h2><div class="vactions" style="margin:8px 0 12px"><button class="btn small ghost" data-act="exportData">${t('exportData')}</button><button class="btn small ghost" data-act="signOut">${t('signOut')}</button>${me().role!=='coord'||D.members.filter(m=>m.role==='coord').length>1?`<button class="btn small ghost" data-act="leave">${t('leave')}</button>`:''}${isCoord()?`<button class="btn small ghost" data-act="delCircle">${t('delCircle')}</button>`:''}</div><p style="padding-bottom:10px;display:flex;gap:16px;flex-wrap:wrap"><a href="conditions.html" target="_blank" rel="noopener">${t('termsLink')}</a><a href="privacidad.html" target="_blank" rel="noopener">${t('privacyLink')}</a><a href="supprimer-donnees.html" target="_blank" rel="noopener">${t('deleteDataLink')}</a></p></section>
   ${auditSection()}</div>
   <p class="note">${t('disclaimer')}</p>`;
@@ -348,8 +349,8 @@ function inviteView(){
 }
 function createView(){return `<div class="top"><div class="logo">${LOGO}Vrylive</div>${langBar()}</div><form class="authcard" data-form="create"><h1>${t('newCircle')}</h1><p class="note">${t('newCircleSub')}</p>
  <label for="c-p">${t('personName')}<input id="c-p" required maxlength="120"></label><label for="c-y">${t('birthDate')}<input id="c-y" type="date" min="1900-01-01"></label><label for="c-c">${t('city')}<input id="c-c" maxlength="80"></label><label for="c-reg">${t('region')}<select id="c-reg">${opts(regionOpts(),'qc')}</select></label>
- <label for="c-me">${t('yourName')}<input id="c-me" required maxlength="80"></label><label for="c-r">${t('yourRel')}<input id="c-r" maxlength="60"></label><label for="c-mc">${t('yourCity')}<input id="c-mc" maxlength="80"></label>
- <button class="btn">${t('create')}</button><button type="button" class="linkbtn" data-act="signOut">${t('signOut')}</button></form>`}
+ <label for="c-me">${t('yourName')}<input id="c-me" required maxlength="80" value="${addingCircle&&D?esc(me().display_name):''}"></label><label for="c-r">${t('yourRel')}<input id="c-r" maxlength="60"></label><label for="c-mc">${t('yourCity')}<input id="c-mc" maxlength="80" value="${addingCircle&&D?esc(me().city||''):''}"></label>
+ <button class="btn">${t('create')}</button>${addingCircle?`<button type="button" class="linkbtn" data-act="cancelNewCircle">${t('cancel')}</button>`:`<button type="button" class="linkbtn" data-act="signOut">${t('signOut')}</button>`}</form>`}
 
 let installEvt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;if(booted)render(true)});
@@ -384,7 +385,7 @@ function render(keep){
   if(recovery){authMode='newpass';solo=authView()}
   else if(!session)solo=authView();
   else if(pendingInvite)solo=inviteView();
-  else if(!cid||!D)solo=createView();
+  else if(!cid||!D||addingCircle)solo=createView();
   if(solo!==null){document.documentElement.classList.remove('pm');app.className='app solo';nav.innerHTML='';root.innerHTML=solo;window.scrollTo(0,0);if(session&&!recovery&&!pendingInvite)setTimeout(showTour,0);return}
   if(session)setTimeout(showTour,0);
   if(!isPerson()||view!=='foryou'){}else view='home';
@@ -441,7 +442,7 @@ const A={
  lang:id=>{li=+id;store.set('cc-lang',id);if(DEMO&&session)return act(async()=>{});render(true)},
  mode:id=>{authMode=id;authMsg='';render()},
  signOut:async()=>{if(DEMO){toast(t('demoNo'));return}try{await db.auth.signOut({scope:'local'})}catch(e){}try{Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))}catch(e){}store.del('cc-circle');session=null;D=null;cid=null;memberships=[];location.replace(location.pathname)},
- acceptInvite:async()=>{try{const c=await rpc('accept_invite',{p_token:pendingInvite});clearInvite();store.set('vl-joined','1');await loadMemberships();cid=c;store.set('cc-circle',c);await load();view='home';render()}catch(e){toast(errText(e));clearInvite();render()}},
+ acceptInvite:async()=>{try{const c=await rpc('accept_invite',{p_token:pendingInvite});clearInvite();store.set('vl-joined','1');await loadMemberships();cid=c;store.set('cc-circle',c);addingCircle=false;await load();view='home';render()}catch(e){toast(errText(e));clearInvite();render()}},
  declineInvite:()=>{clearInvite();render()},
  toggle:id=>{const x=task(id);if(x.done_at)return act(()=>upd('tasks',id,{done_at:null,done_by:null}));if(notYet(x)){toast(t('availOn',day(x.due)));return}form(x.title,[{id:'d',label:t('doneDate'),type:'date',value:today(),min:x.due,max:today(),req:1}],async v=>{await upd('tasks',id,{done_at:v.d,done_by:me().id});await post('sysDone',me().display_name,x.title)})},
  takeTask:id=>{const x=task(id);return act(async()=>{await upd('tasks',id,{who_member:me().id});await post('sysTake',me().display_name,x.title)},t('saved'))},
@@ -451,7 +452,7 @@ const A={
  delMsg:id=>act(()=>del('messages',id),t('deleted')),
  delDoc:id=>{const x=D.documents.find(q=>q.id===id);return act(async()=>{if(x.storage_path)await must(db.storage.from('documents').remove([x.storage_path]));await del('documents',id)},t('deleted'))},
  openDoc:async id=>{if(DEMO){toast(t('demoNo'));return}const x=D.documents.find(q=>q.id===id),w=window.open('','_blank');try{await rpc('log_document_open',{p_doc:id});const r=await must(db.storage.from('documents').createSignedUrl(x.storage_path,60));if(w)w.location=r.signedUrl;else location.href=r.signedUrl}catch(e){if(w)w.close();toast(errText(e))}},
- filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},installApp:async()=>{if(!installEvt)return;installEvt.prompt();try{const r=await installEvt.userChoice;if(r&&r.outcome!=='accepted')store.set('vl-install-snooze',String(Date.now()+30*864e5))}catch(e){}installEvt=null;render(true)},installLater:()=>{store.set('vl-install-snooze',String(Date.now()+30*864e5));render(true)},joinedOk:()=>{store.del('vl-joined');render(true)},replayTour:()=>{store.del('vl-tour-done');if(session&&session.user&&session.user.user_metadata)session.user.user_metadata.tour_done=false;showTour()},auditMoreBtn:()=>{auditN+=30;refreshAudit()},auditReset:()=>{auditF={who:'',act:'',from:'',to:''};auditN=30;refreshAudit()},seeLate:()=>{taskWho=null;taskFilter='late';view='tasks';render()},
+ filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},installApp:async()=>{if(!installEvt)return;installEvt.prompt();try{const r=await installEvt.userChoice;if(r&&r.outcome!=='accepted')store.set('vl-install-snooze',String(Date.now()+30*864e5))}catch(e){}installEvt=null;render(true)},installLater:()=>{store.set('vl-install-snooze',String(Date.now()+30*864e5));render(true)},joinedOk:()=>{store.del('vl-joined');render(true)},replayTour:()=>{store.del('vl-tour-done');if(session&&session.user&&session.user.user_metadata)session.user.user_metadata.tour_done=false;showTour()},newCircleBtn:()=>{if(DEMO){toast(t('demoNo'));return}addingCircle=true;render()},cancelNewCircle:()=>{addingCircle=false;render()},switchCircle:id=>{cid=id;store.set('cc-circle',id);act(async()=>{view='home'})},auditMoreBtn:()=>{auditN+=30;refreshAudit()},auditReset:()=>{auditF={who:'',act:'',from:'',to:''};auditN=30;refreshAudit()},seeLate:()=>{taskWho=null;taskFilter='late';view='tasks';render()},
  tf:id=>{taskFilter=id;render(true)},tw:id=>{taskWho=id||null;render(true)},mf:id=>{msgFilter=id;render(true)},jf:id=>{jFilter=id;render(true)},vf:id=>{vFilter=id;render(true)},pickDay:id=>{selDate=id;render(true)},
  calPrev:()=>{calM--;if(calM<0){calM=11;calY--}render(true)},calNext:()=>{calM++;if(calM>11){calM=0;calY++}render(true)},
  star:id=>{const m=D.messages.find(q=>q.id===id);return act(()=>upd('messages',id,{important:!m.important}))},
@@ -569,7 +570,7 @@ document.addEventListener('submit',async e=>{
  const id=e.target.id,kind=e.target.dataset.form;
  if(id==='composer'){e.preventDefault();const box=document.getElementById('msg-text'),v=box.value.trim();if(!v)return;box.value='';box.blur();await act(()=>ins('messages',{author:me().id,body:v}),t('sent'));return}
  if(kind==='auth'){e.preventDefault();await submitAuth();return}
- if(kind==='create'){e.preventDefault();const g=x=>document.getElementById(x).value.trim();try{const y=g('c-y');const c=await rpc('create_circle',{p_person_name:g('c-p'),p_birth_date:y||null,p_city:g('c-c'),p_my_name:g('c-me'),p_relation:g('c-r'),p_my_city:g('c-mc'),p_region:g('c-reg')});await loadMemberships();cid=c;store.set('cc-circle',c);await load();view='home';render()}catch(err){toast(errText(err))}}
+ if(kind==='create'){e.preventDefault();const g=x=>document.getElementById(x).value.trim();try{const y=g('c-y');const c=await rpc('create_circle',{p_person_name:g('c-p'),p_birth_date:y||null,p_city:g('c-c'),p_my_name:g('c-me'),p_relation:g('c-r'),p_my_city:g('c-mc'),p_region:g('c-reg')});await loadMemberships();cid=c;store.set('cc-circle',c);addingCircle=false;await load();view='home';render()}catch(err){toast(errText(err))}}
 });
 async function submitAuth(){
  const g=x=>{const el=document.getElementById(x);return el?el.value.trim():''},btn=document.getElementById('a-go');btn.disabled=true;authMsg='';
