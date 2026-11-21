@@ -578,5 +578,9 @@ window.CC_S={
 "pdfNotGiven":["No dadas","Non données","Not given"],
 "pdfSkipped":["omitida","omise","skipped"],
 "pdfMissing":["sin registrar","non inscrite","not recorded"],
-"pdfPastT":["Citas pasadas (últimas 8 semanas)","Rendez-vous passés (8 dernières semaines)","Past appointments (last 8 weeks)"]
+"pdfPastT":["Citas pasadas (últimas 8 semanas)","Rendez-vous passés (8 dernières semaines)","Past appointments (last 8 weeks)"],
+"r_other":["Otra región","Autre région","Other region"],
+"regionOther":["Si es otra región: país","Si autre région : pays","If other region: country"],
+"lineOtherEm":["Urgencias","Urgences","Emergencies"],
+"lineOtherEmN":["Número de urgencias de su país","Numéro d'urgence de votre pays","Your country's emergency number"]
 };
