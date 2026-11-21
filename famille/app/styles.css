@@ -303,3 +303,15 @@ html.pm body{font-size:21px}
 .cal i.shift.open{background:var(--yolk);outline:1px solid #8A6500}
 .cal-legend i.shift{background:#8A4FC2;border-radius:2px;transform:rotate(45deg)}
 .row.shift{box-shadow:inset 4px 0 0 #8A4FC2;padding-left:12px}
+
+/* ===== Panel mensual ===== */
+.month .calbar h2{font-size:1.15rem;text-align:center;flex:1}
+.month .iconbtn:disabled{opacity:.35}
+.mrows li{padding:10px 0;border-top:1px solid var(--line)}
+.mrows li:first-child{border-top:0}
+.mhead{display:grid;grid-template-columns:36px minmax(60px,110px) minmax(0,1fr) 44px;gap:10px;align-items:center}
+.mhead .b{height:12px;background:var(--ground);border-radius:6px;overflow:hidden}
+.mhead .b i{display:block;height:100%}
+.mhead em{font-style:normal;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.mrows .meta{margin:4px 0 0 46px}
+.mrows .linkbtn{margin-left:46px}

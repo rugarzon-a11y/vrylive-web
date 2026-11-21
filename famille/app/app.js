@@ -29,7 +29,7 @@ let session=null,memberships=[],cid=null,D=null,authMode='login',authMsg='',reco
 let pendingInvite=null,invitePreview=null,inviteChecked=false;
 let view='home',taskFilter='open',taskWho=null,msgFilter='all',jFilter='all',vFilter='all',selDate=today(),calY=new Date().getFullYear(),calM=new Date().getMonth();
 
-let addingCircle=false,auditN=30,auditF={who:'',act:'',from:'',to:''},auditMore=false;
+let monthOff=0,addingCircle=false,auditN=30,auditF={who:'',act:'',from:'',to:''},auditMore=false;
 const AUDIT_GROUPS={insert:['insert'],update:['update'],delete:['delete'],open:['open'],rep:['propose','confirm','end']};
 async function fetchAudit(){
  let qy=db.from('audit_log').select('*').eq('circle_id',cid);
@@ -179,8 +179,24 @@ function shareData(){
   if(tops.every(x=>x)&&tops.every(x=>x.m===tops[0].m)){const mm=member(tops[0].m);if(mm)warn={m:mm,p:Math.round(tops.reduce((a,x)=>a+x.p,0)/3*100)}}}
  return{w,tot4,all4,warn};
 }
+const hNum=v=>(v/60).toLocaleString(LOC[li],{maximumFractionDigits:1});
+const plu=(k,n)=>t(n===1?k+'1':k,String(n));
+function monthRange(off){const x=new Date();x.setDate(1);x.setMonth(x.getMonth()+off);const a=iso(x),y=new Date(x);y.setMonth(y.getMonth()+1);y.setDate(0);return [a,iso(y),x]}
+function monthData(off){const [a,b]=monthRange(off),lim=b<today()?b:today(),inM=d=>d&&d>=a&&d<=lim,R={};
+ const r=id=>R[id]||(R[id]={tasks:[],ev:[],sh:[],doses:0,min:0});
+ D.tasks.forEach(x=>{if(x.done_at&&inM(x.done_at)&&x.done_by){const o=r(x.done_by);o.tasks.push(x);o.min+=x.minutes||30}});
+ D.events.forEach(e=>{if(inM(e.date)&&e.who_member&&e.type!=='reminder'){const o=r(e.who_member);o.ev.push(e);o.min+=60}});
+ (D.shifts||[]).forEach(x=>{if(x.status==='accepted'&&inM(x.date)&&x.covered_by){const o=r(x.covered_by);o.sh.push(x);o.min+=shMin(x)}});
+ (D.med_logs||[]).forEach(l=>{if(l.status==='given'&&inM(l.date)&&l.given_by)r(l.given_by).doses++});
+ const tot=Object.values(R).reduce((s,o)=>s+o.min,0);return {R,tot}}
+function monthSection(){const [a,,x]=monthRange(monthOff),md=monthData(monthOff),fam=carers(),title=new Intl.DateTimeFormat(LOC[li],{month:'long',year:'numeric'}).format(x);
+ const max=Math.max(1,...fam.map(m=>(md.R[m.id]||{}).min||0)),top=fam.map(m=>[m,(md.R[m.id]||{}).min||0]).sort((p,q)=>q[1]-p[1])[0],heavy=fam.length>1&&md.tot>0&&top&&top[1]/md.tot>=.6;
+ const h=v=>t('hrs',hNum(v));
+ return `<section class="sheet month"><div class="calbar"><button class="iconbtn" data-act="monthPrev" aria-label="${t('prev')}">‹</button><h2 style="margin:0">${esc(t('monthT',title))}</h2><button class="iconbtn" data-act="monthNext" aria-label="${t('next')}"${monthOff>=0?' disabled':''}>›</button></div><p class="note">${t('monthSub')}</p>${heavy?`<p class="warn-line" style="margin:8px 0">${esc(t('monthHeavy',top[0].display_name,String(Math.round(top[1]/md.tot*100))))}</p>`:''}
+ ${md.tot?`<ul class="mrows">${fam.map(m=>{const o=md.R[m.id]||{tasks:[],ev:[],sh:[],doses:0,min:0},p=md.tot?Math.round(o.min/md.tot*100):0;return `<li><div class="mhead">${av(m.id,1)}<b>${esc(m.display_name)}</b><span class="b"><i style="width:${o.min/max*100}%;background:${color(m)}"></i></span><em>${p}${li===1?'\u00A0%':'%'}</em></div><p class="meta"><span>${esc(plu('mTasks',o.tasks.length))}</span><span>${esc(plu('mAppts',o.ev.length))}</span><span>${esc(plu('mShifts',o.sh.length))}</span><span>${esc(plu('mDoses',o.doses))}</span><span><b>${esc(h(o.min))}</b></span></p>${o.tasks.length+o.ev.length+o.sh.length?`<button class="linkbtn" data-act="monthDetail" data-id="${m.id}">${t('mDetail')}</button>`:''}</li>`}).join('')}</ul>`:`<p class="empty">${t('monthEmpty')}</p>`}
+ <p class="note" style="padding:6px 0 10px">${t('monthEst')}</p></section>`}
 function shareSection(){const s=shareData(),fam=carers(),max=Math.max(1,...fam.map(m=>s.tot4[m.id]||0)),spm=Math.max(1,...fam.flatMap(q=>[0,1,2,3,4,5,6,7].map(i=>s.w[i][q.id]||0)));
- return `<section class="sheet"><h2>${t('shareT')}</h2><p class="note">${t('shareSub')}</p>${s.warn?`<p class="warn-line" style="margin:8px 0">${esc(t('shareWarn',s.warn.m.display_name,s.warn.p))}</p>`:''}<ul class="bars share">${fam.map(m=>{const v=s.tot4[m.id]||0,p=s.all4?Math.round(v/s.all4*100):0;return `<li>${av(m.id,1)}<span>${esc(m.display_name)}</span><span class="b"><i style="width:${v/max*100}%;background:${color(m)}"></i></span><em>${p}%</em><small class="note">${esc(t('hrs',(v/60).toFixed(v%60?1:0)))}</small><span class="spark" aria-hidden="true">${[7,6,5,4,3,2,1,0].map(i=>`<i style="height:${Math.max(2,(s.w[i][m.id]||0)/spm*28)}px;background:${color(m)}"></i>`).join('')}</span></li>`}).join('')}</ul><p class="note" style="padding:6px 0 10px">${t('estNote')} ${t('sparkNote')}</p></section>`}
+ return `<section class="sheet"><h2>${t('shareT')}</h2><p class="note">${t('shareSub')}</p>${s.warn?`<p class="warn-line" style="margin:8px 0">${esc(t('shareWarn',s.warn.m.display_name,s.warn.p))}</p>`:''}<ul class="bars share">${fam.map(m=>{const v=s.tot4[m.id]||0,p=s.all4?Math.round(v/s.all4*100):0;return `<li>${av(m.id,1)}<span>${esc(m.display_name)}</span><span class="b"><i style="width:${v/max*100}%;background:${color(m)}"></i></span><em>${p}${li===1?'\u00A0%':'%'}</em><small class="note">${esc(t('hrs',hNum(v)))}</small><span class="spark" aria-hidden="true">${[7,6,5,4,3,2,1,0].map(i=>`<i style="height:${Math.max(2,(s.w[i][m.id]||0)/spm*28)}px;background:${color(m)}"></i>`).join('')}</span></li>`}).join('')}</ul><p class="note" style="padding:6px 0 10px">${t('estNote')} ${t('sparkNote')}</p></section>`}
 let lastAgenda={};
 function agendaItems(){
  const it=[];
@@ -305,7 +321,7 @@ profile(){
 summary(){
   const w=weekData(),max=Math.max(1,...family().map(q=>w.done.filter(x=>x.who_member===q.id).length));
   return head('summary',t('period'),`<button class="btn ghost" data-act="copy">${t('copy')}</button>`)+`<div class="stats"><div><b>${w.done.length}</b><span>${t('doneWeek')}</span></div><div><b>${w.pend.length}</b><span>${t('pendingWeek')}</span></div><div><b>${w.ev.length}</b><span>${t('apptWeek')}</span></div><div><b>${w.log.length}</b><span>${t('logWeek')}</span></div></div>
-  <div class="cols">${shareSection()}<section class="sheet" hidden><h2>${t('whoDid')}</h2><ul class="bars">${family().map(m=>{const n=w.done.filter(x=>x.who_member===m.id).length;return `<li>${av(m.id,1)}<span>${esc(m.display_name)}</span><span class="b"><i style="width:${n/max*100}%;background:${color(m)}"></i></span><em>${n}</em></li>`}).join('')}</ul></section>
+  ${monthSection()}<div class="cols">${shareSection()}<section class="sheet" hidden><h2>${t('whoDid')}</h2><ul class="bars">${family().map(m=>{const n=w.done.filter(x=>x.who_member===m.id).length;return `<li>${av(m.id,1)}<span>${esc(m.display_name)}</span><span class="b"><i style="width:${n/max*100}%;background:${color(m)}"></i></span><em>${n}</em></li>`}).join('')}</ul></section>
   ${block(t('apptWeek'),w.ev.map(e=>eventRow(e,true)))}${block(t('pendList'),w.pend.map(x=>`<li class="row">${av(x.who_member,1)}<div class="grow"><div class="title">${esc(x.title)}</div>${taskMeta(x)}</div></li>`))}${block(t('eventsLog'),w.log.map(j=>`<li class="row"><div class="grow"><div class="meta"><b style="color:var(--ink)">${esc(day(j.date))}</b></div><p>${esc(j.body)}</p></div></li>`))}${block(t('voiceWeek',firstName()),w.voice.map(v=>`<li class="row">${avP(1)}<div class="grow"><div class="meta"><span class="tag plain">${t('c_'+v.cat)}</span><span>${esc(day(stamp(v.created_at).date))}</span></div><p>${esc(v.body)}</p></div></li>`))}</div>`;
 },
 meds(){
@@ -452,7 +468,11 @@ const A={
  delMsg:id=>act(()=>del('messages',id),t('deleted')),
  delDoc:id=>{const x=D.documents.find(q=>q.id===id);return act(async()=>{if(x.storage_path)await must(db.storage.from('documents').remove([x.storage_path]));await del('documents',id)},t('deleted'))},
  openDoc:async id=>{if(DEMO){toast(t('demoNo'));return}const x=D.documents.find(q=>q.id===id),w=window.open('','_blank');try{await rpc('log_document_open',{p_doc:id});const r=await must(db.storage.from('documents').createSignedUrl(x.storage_path,60));if(w)w.location=r.signedUrl;else location.href=r.signedUrl}catch(e){if(w)w.close();toast(errText(e))}},
- filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},installApp:async()=>{if(!installEvt)return;installEvt.prompt();try{const r=await installEvt.userChoice;if(r&&r.outcome!=='accepted')store.set('vl-install-snooze',String(Date.now()+30*864e5))}catch(e){}installEvt=null;render(true)},installLater:()=>{store.set('vl-install-snooze',String(Date.now()+30*864e5));render(true)},joinedOk:()=>{store.del('vl-joined');render(true)},replayTour:()=>{store.del('vl-tour-done');if(session&&session.user&&session.user.user_metadata)session.user.user_metadata.tour_done=false;showTour()},newCircleBtn:()=>{if(DEMO){toast(t('demoNo'));return}addingCircle=true;render()},cancelNewCircle:()=>{addingCircle=false;render()},switchCircle:id=>{cid=id;store.set('cc-circle',id);act(async()=>{view='home'})},auditMoreBtn:()=>{auditN+=30;refreshAudit()},auditReset:()=>{auditF={who:'',act:'',from:'',to:''};auditN=30;refreshAudit()},seeLate:()=>{taskWho=null;taskFilter='late';view='tasks';render()},
+ filterWho:id=>{taskWho=id;taskFilter='open';view='tasks';render()},filterOpen:()=>{taskWho=null;taskFilter='open';view='tasks';render()},installApp:async()=>{if(!installEvt)return;installEvt.prompt();try{const r=await installEvt.userChoice;if(r&&r.outcome!=='accepted')store.set('vl-install-snooze',String(Date.now()+30*864e5))}catch(e){}installEvt=null;render(true)},installLater:()=>{store.set('vl-install-snooze',String(Date.now()+30*864e5));render(true)},joinedOk:()=>{store.del('vl-joined');render(true)},replayTour:()=>{store.del('vl-tour-done');if(session&&session.user&&session.user.user_metadata)session.user.user_metadata.tour_done=false;showTour()},newCircleBtn:()=>{if(DEMO){toast(t('demoNo'));return}addingCircle=true;render()},cancelNewCircle:()=>{addingCircle=false;render()},switchCircle:id=>{cid=id;store.set('cc-circle',id);act(async()=>{view='home'})},monthPrev:()=>{monthOff--;render(true)},monthNext:()=>{if(monthOff<0){monthOff++;render(true)}},
+ monthDetail:id=>{const o=monthData(monthOff).R[id]||{tasks:[],ev:[],sh:[]},m=member(id),[,,x]=monthRange(monthOff);const ttl=(m?m.display_name:'')+' - '+new Intl.DateTimeFormat(LOC[li],{month:'long',year:'numeric'}).format(x);
+  const items=[...o.tasks.map(q=>[q.done_at,t('mTaskDone')+CS()+q.title]),...o.ev.map(e=>[e.date,t('mApptDone')+CS()+e.title]),...o.sh.map(q=>[q.date,t('mShiftDone')+CS()+q.what+' ('+hm5(q.start_time)+' - '+hm5(q.end_time)+')'])].sort((p,q)=>q[0].localeCompare(p[0]));
+  infoDialog(ttl,`<ul class="facts">${items.map(([d1,txt])=>`<li><b>${esc(day(d1))}</b> ${esc(txt)}</li>`).join('')}</ul>`)},
+ auditMoreBtn:()=>{auditN+=30;refreshAudit()},auditReset:()=>{auditF={who:'',act:'',from:'',to:''};auditN=30;refreshAudit()},seeLate:()=>{taskWho=null;taskFilter='late';view='tasks';render()},
  tf:id=>{taskFilter=id;render(true)},tw:id=>{taskWho=id||null;render(true)},mf:id=>{msgFilter=id;render(true)},jf:id=>{jFilter=id;render(true)},vf:id=>{vFilter=id;render(true)},pickDay:id=>{selDate=id;render(true)},
  calPrev:()=>{calM--;if(calM<0){calM=11;calY--}render(true)},calNext:()=>{calM++;if(calM>11){calM=0;calY++}render(true)},
  star:id=>{const m=D.messages.find(q=>q.id===id);return act(()=>upd('messages',id,{important:!m.important}))},
@@ -535,8 +555,22 @@ async function makePdf(){
  sec(t('pdfMeds'));
  const md=medsActive();
  if(md.length)md.forEach(m=>{line(m.name+(m.dose?' - '+m.dose:''),{b:1,ind:2,gap:0.5});line(t('pdfTimes',slots(m).join(', '))+(m.giver?' - '+t('pdfGiver',mn(m.giver)):''),{ind:6,gap:0.5});if(m.note)line(m.note,{ind:6,gap:0.5});y+=1.5});else line(t('pdfNone'),{ind:2});
+ sec(t('pdfDosesT'));
+ line(t('pdfDosesSub'),{s:10,gap:2});
+ const from=d(-27),pdfDay=dd=>fmt(dd,{weekday:'short',day:'numeric',month:'short'});let anyMed=false;
+ medsActive().forEach(m=>{const start=m.created_at?iso(new Date(m.created_at)):from,first=start>from?start:from;let given=0,skipped=0,missing=0;const miss=[];
+  for(let k=27;k>=0;k--){const dd=d(-k);if(dd<first)continue;dosesOn(dd).filter(x=>x.m.id===m.id).forEach(x=>{if(x.log&&x.log.status==='given')given++;else if(x.log&&x.log.status==='skipped'){skipped++;miss.push(pdfDay(dd)+' '+x.time+' ('+t('pdfSkipped')+')')}else if(x.late){missing++;miss.push(pdfDay(dd)+' '+x.time+' ('+t('pdfMissing')+')')}})}
+  const tot=given+skipped+missing;if(!tot)return;anyMed=true;
+  line(m.name+(m.dose?' - '+m.dose:''),{b:1,ind:2,gap:0.5});
+  line(t('pdfDosesLine',String(given),String(tot),String(skipped),String(missing)),{ind:6,gap:0.5});
+  if(miss.length)line(t('pdfNotGiven')+CS()+miss.slice(-10).join('; ')+(miss.length>10?' ...':''),{ind:6,s:10,gap:0.5});
+  y+=1.5});
+ if(!anyMed)line(t('pdfNone'),{ind:2});
+ sec(t('pdfPastT'));
+ const past=D.events.filter(e=>e.date<today()&&e.date>=d(-56)&&e.type==='appointment').sort((p,q)=>(q.date+q.time).localeCompare(p.date+p.time));
+ if(past.length)past.forEach(e=>line(longDate(e.date)+', '+hm(e.time)+' - '+e.title+(e.who_member?' ('+t('pdfWith',mn(e.who_member))+')':''),{ind:2}));else line(t('pdfNone'),{ind:2});
  y+=6;line(t('pdfFoot'),{s:9});
- const pages=doc.getNumberOfPages();for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90,83,114);doc.text('Vrylive Famille - '+i+'/'+pages,W-M,H-8,{align:'right'});doc.setTextColor(0)}
+ const pages=doc.getNumberOfPages();for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90,83,114);doc.text(['Vrylive Familia','Vrylive Famille','Vrylive Family'][li]+' - '+i+'/'+pages,W-M,H-8,{align:'right'});doc.setTextColor(0)}
  doc.save('vrylive-'+today()+'.pdf');
 }
 const DELS={delMsg:['messages','body'],delEvent:['events','title'],delTask:['tasks','title'],delContact:['contacts','name'],delPractical:['practical','body'],delNeed:['needs','body'],delWish:['wishes','body'],delVoice:['voices','body'],delDoc:['documents','name'],delMed:['meds','name'],revokeInv:['invites','display_name'],removeMember:['members','display_name'],leave:[null,null]};
