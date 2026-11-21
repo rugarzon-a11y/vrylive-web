@@ -297,3 +297,9 @@ html.pm body{font-size:21px}
 .helpsteps{display:grid;gap:14px;padding-left:1.4em;margin:6px 0}
 .helpsteps h3{font-size:1.08rem;margin-bottom:2px}
 .helpsteps p{color:var(--ink)}
+
+/* ===== Relevos ===== */
+.cal i.shift{background:#8A4FC2;border-radius:2px;transform:rotate(45deg)}
+.cal i.shift.open{background:var(--yolk);outline:1px solid #8A6500}
+.cal-legend i.shift{background:#8A4FC2;border-radius:2px;transform:rotate(45deg)}
+.row.shift{box-shadow:inset 4px 0 0 #8A4FC2;padding-left:12px}

@@ -95,15 +95,15 @@ async function load(){
     role==='coord'?db.from('circle_private').select('*').eq('circle_id',cid).then(r=>r.error?[]:r.data,()=>[]):Promise.resolve([]),
     (role==='coord'||role==='person'||(circle.capacity_status==='represented'&&circle.rep_member_id===members.find(m=>m.user_id===session.user.id).id))?fetchAudit():Promise.resolve(null)]);
   const qs=tbl=>db.from(tbl).select('*').eq('circle_id',cid).then(r=>r.error?[]:r.data,()=>[]);
-  const [meds,med_logs,meetings,meeting_points,notif_prefs]=await Promise.all(['meds','med_logs','meetings','meeting_points','notif_prefs'].map(qs));
-  D={priv:(priv&&priv[0])||null,meds,med_logs,meetings,meeting_points,notif_prefs,circle,members:members.sort((a,b)=>a.created_at.localeCompare(b.created_at)),events,tasks,messages:messages.sort((a,b)=>a.created_at.localeCompare(b.created_at)),journal,documents,contacts,needs,practical,voices,replies,wishes,moods,invites,audit};
+  const [meds,med_logs,meetings,meeting_points,notif_prefs,shifts]=await Promise.all(['meds','med_logs','meetings','meeting_points','notif_prefs','shifts'].map(qs));
+  D={shifts,priv:(priv&&priv[0])||null,meds,med_logs,meetings,meeting_points,notif_prefs,circle,members:members.sort((a,b)=>a.created_at.localeCompare(b.created_at)),events,tasks,messages:messages.sort((a,b)=>a.created_at.localeCompare(b.created_at)),journal,documents,contacts,needs,practical,voices,replies,wishes,moods,invites,audit};
 }
 const ins=(tbl,row)=>must(db.from(tbl).insert({circle_id:cid,...row}));
 const upd=(tbl,id,row)=>must(db.from(tbl).update(row).eq('id',id));
 const del=(tbl,id)=>must(db.from(tbl).delete().eq('id',id));
 const post=(key,who,what)=>ins('messages',{author:me().id,sys_key:key,sys_who:who,sys_what:what||null});
 
-function errText(e){const m=(e&&e.message)||'';if(m==='file')return t('e_file');if(m==='times')return t('e_times');for(const k of ['not_yet','only_responsible','last_coord','person_exists','needs_other_member','already_member','invite_invalid','confirm_mismatch']){if(m.includes(k))return t('e_'+k)}return t('genericErr')}
+function errText(e){const m=(e&&e.message)||'';if(m==='file')return t('e_file');if(m==='times')return t('e_times');for(const k of ['shift_hours','shift_taken','own_shift','not_yet','only_responsible','last_coord','person_exists','needs_other_member','already_member','invite_invalid','confirm_mismatch']){if(m.includes(k))return t('e_'+k)}return t('genericErr')}
 async function act(fn,okMsg){try{await fn();await load();render(true);if(okMsg)toast(okMsg);return true}catch(e){console.error(e);toast(errText(e));return false}}
 
 // ===== Componentes =====
@@ -154,11 +154,25 @@ function doseRow(x){const by=x.log&&member(x.log.given_by);
 const WEEKMS=7*864e5;
 const wkIdx=s=>{const b=dt(s);b.setDate(b.getDate()-((b.getDay()+6)%7));return Math.round((dt(weekStart())-b)/WEEKMS)};
 const carers=()=>family().filter(m=>m.role!=='viewer');
+const hm5=x=>String(x||'').slice(0,5);
+const shMin=x=>{const [a,b]=[hm5(x.start_time),hm5(x.end_time)].map(v=>{const [h,m]=v.split(':').map(Number);return h*60+m});return Math.max(0,b-a)};
+const shiftsLive=()=>(D.shifts||[]).filter(x=>x.status!=='cancelled');
+const shiftsOpen=()=>shiftsLive().filter(x=>x.status==='open'&&x.date>=today()).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
+const shiftsMine=()=>shiftsLive().filter(x=>x.status==='accepted'&&x.date>=today()).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
+function shiftRow(x){const mine=x.requested_by===me().id,asked=x.asked_member===me().id,cov=x.covered_by===me().id,when=day(x.date)+', '+hm5(x.start_time)+' - '+hm5(x.end_time);
+ const meta=`<div class="meta"><span>${esc(when)}</span><span>${esc(t('shiftBy',(member(x.requested_by)||{}).display_name||''))}</span>${x.status==='accepted'?`<span class="tag okt">${esc(t('shiftCovered',(member(x.covered_by)||{}).display_name||''))}</span>`:asked?`<span class="tag yolk">${t('shiftAskedYou')}</span>`:x.asked_member?`<span class="tag plain">${esc(t('shiftAskedTo',(member(x.asked_member)||{}).display_name||''))}</span>`:`<span class="tag yolk">${t('shiftOpen')}</span>`}</div>`;
+ let btns='';
+ if(canEdit()){if(x.status==='open'&&!mine)btns+=`<button class="btn small" data-act="acceptShift" data-id="${x.id}">${t('shiftCan')}</button>`;
+  if(x.status==='open'&&asked)btns+=`<button class="btn small ghost" data-act="declineShift" data-id="${x.id}">${t('shiftCannot')}</button>`;
+  if(mine||isCoord())btns+=`<button class="mini" data-act="cancelShift" data-id="${x.id}">${t('shiftCancel')}</button>`;
+  else if(cov&&x.status==='accepted')btns+=`<button class="mini" data-act="cancelShift" data-id="${x.id}">${t('shiftRelease')}</button>`}
+ return `<li class="row wrap-sm shift">${av(x.requested_by)}<div class="grow"><div class="title">${esc(x.what)}</div>${meta}</div>${btns?`<div class="docctl">${btns}</div>`:''}</li>`}
 function shareData(){
  const fam=carers(),w=[...Array(8)].map(()=>({}));
  const add=(i,m,min)=>{if(i<0||i>7||!m)return;w[i][m]=(w[i][m]||0)+min};
  D.tasks.forEach(x=>{if(x.done_at)add(wkIdx(x.done_at),x.done_by,x.minutes||30)});
  D.events.forEach(e=>{if(e.date<=today()&&e.who_member&&e.type!=='reminder')add(wkIdx(e.date),e.who_member,60)});
+ (D.shifts||[]).forEach(x=>{if(x.status==='accepted'&&x.date<=today())add(wkIdx(x.date),x.covered_by,shMin(x))});
  const tot4={};let all4=0;for(let i=0;i<4;i++)for(const m in w[i]){tot4[m]=(tot4[m]||0)+w[i][m];all4+=w[i][m]}
  let warn=null;
  if(fam.length>1){const tops=[1,2,3].map(i=>{const tt=Object.values(w[i]).reduce((a,b)=>a+b,0);if(!tt)return null;const [m,v]=Object.entries(w[i]).sort((a,b)=>b[1]-a[1])[0];return v/tt>=.5?{m,p:v/tt}:null});
@@ -197,12 +211,13 @@ home(){
   const un=o.filter(x=>!x.who_member).length,nl=n=>n===1?t('nOpen1'):t('nOpen',n);
   const lateT=o.filter(isLate),noE=D.events.filter(e=>!e.who_member&&e.date>=today()),unT=o.filter(x=>!x.who_member);
   const docW=D.documents.filter(x=>x.exp&&x.exp<=d(30));
-  const todayE=D.events.filter(e=>e.date===today()).sort((a,b)=>a.time.localeCompare(b.time)),todayT=o.filter(x=>x.due===today());
+  const todayE=D.events.filter(e=>e.date===today()).sort((a,b)=>a.time.localeCompare(b.time)),todayT=o.filter(x=>x.due===today()),todayS=shiftsLive().filter(x=>x.status==='accepted'&&x.date===today());
   const vNew=voicesSorted().filter(v=>v.status==='new');
   const dLate=dosesOn(today()).filter(x=>x.late),dNext=dosesOn(today()).filter(x=>!x.log&&!x.late),shw=shareData().warn;
   const att=[...dLate.map(doseRow),...(shw?[`<li class="row wrap-sm"><div class="grow"><div class="title">${esc(t('shareWarn',shw.m.display_name,shw.p))}</div><div class="meta"><span class="tag yolk">${t('shareT')}</span></div></div><button class="btn small ghost" data-nav="summary">${t('see')}</button></li>`]:[]),...vNew.map(v=>`<li class="row wrap-sm">${avP()}<div class="grow"><div class="title">${esc(v.body)}</div><div class="meta"><span class="tag plain">${t('c_'+v.cat)}</span></div></div><button class="btn small ghost" data-nav="voice">${t('see')}</button></li>`),
    ...(D.circle.capacity_status==='pending'?[`<li class="row wrap-sm"><div class="grow"><div class="title">${t('capPending')}</div></div><button class="btn small ghost" data-nav="profile">${t('see')}</button></li>`]:[]),
    ...lateT.map(x=>`<li class="row wrap-sm">${av(x.who_member)}<div class="grow"><div class="title">${esc(x.title)}</div>${taskMeta(x)}</div></li>`),
+   ...shiftsOpen().filter(x=>x.requested_by!==me().id).map(shiftRow),
    ...noE.map(e=>eventRow(e,true)),
    ...unT.filter(x=>!isLate(x)).map(x=>`<li class="row wrap-sm">${av(null)}<div class="grow"><div class="title">${esc(x.title)}</div>${taskMeta(x)}</div>${canEdit()?`<button class="btn small ghost" data-act="takeTask" data-id="${x.id}">${t('take')}</button>`:''}</li>`),
    ...docW.map(x=>`<li class="row"><div class="grow"><div class="title">${esc(x.name)}</div><div class="meta">${docTag(x)}</div></div></li>`)];
@@ -211,18 +226,18 @@ home(){
   ${over?`<p class="warn-line">${esc(t('overload',top.m.display_name,top.n,o.length))}</p>`:''}</div></section>
   ${lateT.length?`<section class="alert-late" role="status"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg><b>${esc(lateT.length===1?t('lateBanner1'):t('lateBanner',String(lateT.length)))}</b><button class="btn small" data-act="seeLate">${t('see')}</button></section>`:''}
   ${D.members.length===1&&isCoord()?`<section class="callout"><b>${t('inviteFirst')}</b><button class="btn small" data-act="invite">${t('invite')}</button></section>`:''}
-  ${demoTips()}<div class="cols"><section class="sheet"><h2>${t('today')}</h2>${todayE.length+todayT.length+dNext.length?`<ul>${todayE.map(e=>eventRow(e)).join('')}${dNext.map(doseRow).join('')}${todayT.map(x=>taskRow(x)).join('')}</ul>`:`<p class="empty">${t('nothingToday')}</p>`}</section>
+  ${demoTips()}<div class="cols"><section class="sheet"><h2>${t('today')}</h2>${todayE.length+todayT.length+dNext.length+todayS.length?`<ul>${todayS.map(shiftRow).join('')}${todayE.map(e=>eventRow(e)).join('')}${dNext.map(doseRow).join('')}${todayT.map(x=>taskRow(x)).join('')}</ul>`:`<p class="empty">${t('nothingToday')}</p>`}</section>
   <section class="sheet"><h2>${t('attention')}</h2>${att.length?`<ul>${att.join('')}</ul>`:`<p class="empty">${t('allClear')}</p>`}</section></div>`;
 },
 calendar(){
   const first=new Date(calY,calM,1),lead=(first.getDay()+6)%7,days=new Date(calY,calM+1,0).getDate(),mon=new Date(2024,0,1);
   const heads=[...Array(7)].map((_,i)=>{const x=new Date(mon);x.setDate(1+i);return `<span>${esc(new Intl.DateTimeFormat(LOC[li],{weekday:'short'}).format(x))}</span>`}).join('');
   let cells='<div></div>'.repeat(lead);
-  for(let n=1;n<=days;n++){const s=iso(new Date(calY,calM,n)),ev=D.events.filter(e=>e.date===s),tk=D.tasks.filter(x=>x.due===s&&!x.done_at);cells+=`<button data-act="pickDay" data-id="${s}" aria-pressed="${s===selDate}" class="${s===today()?'today':''}" aria-label="${esc(fmt(s,{day:'numeric',month:'long'})+CS()+t('calCount',String(ev.length),String(tk.length)))}">${n}<span class="dots-d">${ev.length?`<i class="${ev.some(e=>!e.who_member)?'open':''}"></i>`:''}${tk.length?`<i class="task${tk.some(isLate)?' late':''}"></i>`:''}</span></button>`}
+  for(let n=1;n<=days;n++){const s=iso(new Date(calY,calM,n)),ev=D.events.filter(e=>e.date===s),tk=D.tasks.filter(x=>x.due===s&&!x.done_at),sh=shiftsLive().filter(x=>x.date===s);cells+=`<button data-act="pickDay" data-id="${s}" aria-pressed="${s===selDate}" class="${s===today()?'today':''}" aria-label="${esc(fmt(s,{day:'numeric',month:'long'})+CS()+t('calCount',String(ev.length),String(tk.length)))}">${n}<span class="dots-d">${ev.length?`<i class="${ev.some(e=>!e.who_member)?'open':''}"></i>`:''}${tk.length?`<i class="task${tk.some(isLate)?' late':''}"></i>`:''}${sh.length?`<i class="shift${sh.some(x=>x.status==='open')?' open':''}"></i>`:''}</span></button>`}
   const selE=D.events.filter(e=>e.date===selDate).sort((a,b)=>a.time.localeCompare(b.time));
-  const selT=D.tasks.filter(x=>x.due===selDate&&!x.done_at);
+  const selT=D.tasks.filter(x=>x.due===selDate&&!x.done_at),selS=shiftsLive().filter(x=>x.date===selDate);
   const up=D.events.filter(e=>e.date>=today()).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  return head('calendar',null,canEdit()?`<button class="btn" data-act="newEvent">${t('addEvent')}</button>`:'')+`<div class="calview"><section class="sheet calsheet"><div class="calbar"><button class="iconbtn" data-act="calPrev" aria-label="${t('prev')}">‹</button><b>${esc(new Intl.DateTimeFormat(LOC[li],{month:'long',year:'numeric'}).format(first))}</b><button class="iconbtn" data-act="calNext" aria-label="${t('next')}">›</button></div><div class="cal">${heads}${cells}</div><p class="cal-legend"><span><i></i>${t('calLegEv')}</span><span><i class="task"></i>${t('calLegTask')}</span></p><h2 style="padding:8px 0">${esc(day(selDate))}</h2>${selE.length?`<ul>${selE.map(e=>eventRow(e,false,true)).join('')}</ul>`:(selT.length?'':`<p class="empty">${t('noEvents')}</p>`)}${selT.length?`<h3 class="cal-sub">${t('calTasksDay')}</h3><ul>${selT.map(x=>taskRow(x,false)).join('')}</ul>`:''}</section><section class="sheet"><h2>${t('upcoming')}</h2>${up.length?`<ul>${up.map(e=>eventRow(e,true)).join('')}</ul>`:`<p class="empty">${t('emptyEvents')}</p>`}</section></div>`;
+  return head('calendar',null,canEdit()?`<button class="btn" data-act="newEvent">${t('addEvent')}</button>`:'')+`<div class="calview"><section class="sheet calsheet"><div class="calbar"><button class="iconbtn" data-act="calPrev" aria-label="${t('prev')}">‹</button><b>${esc(new Intl.DateTimeFormat(LOC[li],{month:'long',year:'numeric'}).format(first))}</b><button class="iconbtn" data-act="calNext" aria-label="${t('next')}">›</button></div><div class="cal">${heads}${cells}</div><p class="cal-legend"><span><i></i>${t('calLegEv')}</span><span><i class="task"></i>${t('calLegTask')}</span><span><i class="shift"></i>${t('calLegShift')}</span></p><h2 style="padding:8px 0">${esc(day(selDate))}</h2>${selE.length?`<ul>${selE.map(e=>eventRow(e,false,true)).join('')}</ul>`:(selT.length||selS.length?'':`<p class="empty">${t('noEvents')}</p>`)}${selS.length?`<h3 class="cal-sub">${t('calShiftsDay')}</h3><ul>${selS.map(shiftRow).join('')}</ul>`:''}${selT.length?`<h3 class="cal-sub">${t('calTasksDay')}</h3><ul>${selT.map(x=>taskRow(x,false)).join('')}</ul>`:''}</section><section class="sheet"><h2>${t('upcoming')}</h2>${up.length?`<ul>${up.map(e=>eventRow(e,true)).join('')}</ul>`:`<p class="empty">${t('emptyEvents')}</p>`}</section></div>`;
 },
 tasks(){
   let l=D.tasks;
@@ -256,7 +271,7 @@ foryou(){
   ${levels.length?`<p class="note">${t('last4')}</p><div class="trend" role="img" aria-label="${esc(levels.slice(-6).map(n=>t('m'+n)).join(', '))}">${levels.slice(-6).map(n=>`<i style="height:${n*12}px"></i>`).join('')}</div>`:''}
   ${cur===4?`<div class="callout"><b>${t('limitCall')}</b>${btn}</div>`:tired?`<div class="callout"><b>${t('tiredCall')}</b>${btn}</div>`:''}</section>
   <section class="sheet"><h2>${t('helpLines')}</h2><ul class="facts">${helpLines().map(([l,n])=>`<li class="line"><span>${l}</span><b>${n}</b></li>`).join('')}</ul></section></div>
-  <section class="sheet"><h2>${t('relief')}</h2><p class="note">${t('reliefSub')}</p>${canEdit()?`<p style="padding:10px 0"><button class="btn" data-act="newRelief">${t('relief')}</button></p>`:''}<h3 style="font-size:1rem;padding:6px 0;color:var(--muted)">${t('reliefOpen')}</h3>${relief.length?`<ul>${relief.map(x=>`<li class="row wrap-sm">${av(x.relief_member,1)}<div class="grow"><div class="title">${esc(x.title)}</div>${taskMeta(x)}</div>${canEdit()&&x.relief_member!==me().id&&!x.who_member?`<button class="btn small ghost" data-act="takeTask" data-id="${x.id}">${t('take')}</button>`:''}</li>`).join('')}</ul>`:`<p class="empty">${t('noRelief')}</p>`}</section>`;
+  <section class="sheet"><h2>${t('relief')}</h2><p class="note">${t('reliefSub')}</p>${canEdit()?`<p style="padding:10px 0"><button class="btn" data-act="newRelief">${t('relief')}</button></p>`:''}<h3 style="font-size:1rem;padding:6px 0;color:var(--muted)">${t('shiftOpenT')}</h3>${shiftsOpen().length?`<ul>${shiftsOpen().map(shiftRow).join('')}</ul>`:`<p class="empty">${t('noRelief')}</p>`}${shiftsMine().length?`<h3 style="font-size:1rem;padding:6px 0;color:var(--muted)">${t('shiftComingT')}</h3><ul>${shiftsMine().map(shiftRow).join('')}</ul>`:''}${relief.length?`<h3 style="font-size:1rem;padding:6px 0;color:var(--muted)">${t('reliefOpen')}</h3>`:''}${relief.length?`<ul>${relief.map(x=>`<li class="row wrap-sm">${av(x.relief_member,1)}<div class="grow"><div class="title">${esc(x.title)}</div>${taskMeta(x)}</div>${canEdit()&&x.relief_member!==me().id&&!x.who_member?`<button class="btn small ghost" data-act="takeTask" data-id="${x.id}">${t('take')}</button>`:''}</li>`).join('')}</ul>`:''}</section>`;
 },
 journal(){
   const cats=[['all','mAll'],['obs','obs'],['need','needChange'],['visit','visit'],['major','major']],label={obs:'obs',need:'needChange',visit:'visit',major:'major'};
@@ -467,7 +482,10 @@ const A={
  replyVoice:id=>form(t('reply'),[{id:'text',label:t('replyTo'),type:'textarea',req:1}],v=>ins('voice_replies',{voice_id:id,author:me().id,body:v.text})),
  voiceTask:id=>{const v=voice(id);form(t('toTask'),[{id:'title',label:t('title'),value:v.body.slice(0,90),req:1},{id:'who',label:t('responsible'),type:'select',value:'',options:memOpts()},{id:'due',label:t('due'),type:'date',value:d(3),req:1}],async x=>{await ins('tasks',{title:x.title,who_member:x.who||null,due:x.due});await rpc('set_voice_status',{p_voice:id,p_status:'progress'});await ins('voice_replies',{voice_id:id,author:me().id,sys_key:'taskCreated',sys_what:x.title})})},
  mood:id=>act(()=>must(db.from('moods').upsert({user_id:session.user.id,circle_id:cid,week_start:weekStart(),level:+id},{onConflict:'user_id,circle_id,week_start'})),t('saved')),
- newRelief:()=>form(t('relief'),[{id:'what',label:t('reliefWhat'),req:1},{id:'date',label:t('reliefDate'),type:'date',value:d(3),req:1}],async v=>{await ins('tasks',{title:t('reliefT',me().display_name,v.what),who_member:null,due:v.date,priority:'high',relief_member:me().id});await post('sysRelief',me().display_name,v.what)}),
+ newRelief:()=>form(t('shiftReq'),[{id:'what',label:t('shiftWhat'),req:1},{id:'date',label:t('reliefDate'),type:'date',value:d(3),min:today(),req:1},{id:'st',label:t('shiftStart'),type:'time',value:'10:00',req:1},{id:'en',label:t('shiftEnd'),type:'time',value:'16:00',req:1},{id:'ask',label:t('shiftAsk'),type:'select',value:'',options:[['',t('shiftAnyone')],...carers().filter(m=>m.id!==me().id).map(m=>[m.id,m.display_name])]}],async v=>{if(v.en<=v.st)throw{message:'shift_hours'};await ins('shifts',{date:v.date,start_time:v.st,end_time:v.en,what:v.what,requested_by:me().id,asked_member:v.ask||null});await post('sysShiftAsked',me().display_name,v.what)},t('shiftNote')),
+ acceptShift:id=>act(()=>rpc('accept_shift',{p_shift:id}),t('shiftThanks')),
+ declineShift:id=>act(()=>rpc('decline_shift',{p_shift:id}),t('saved')),
+ cancelShift:id=>act(()=>rpc('cancel_shift',{p_shift:id}),t('saved')),
  proposeRep:()=>{const cand=D.members.filter(m=>['coord','fam'].includes(m.role)).map(m=>[m.id,m.display_name]);form(t('capRegister'),[{id:'who',label:t('capWho'),type:'select',value:me().id,options:cand},{id:'basis',label:t('capBasisL'),type:'select',value:D.circle.capacity_status==='represented'?'court_decision':'family_agreement',options:D.circle.capacity_status==='represented'?[['court_decision',t('court_decision')]]:[['family_agreement',t('family_agreement')],['court_decision',t('court_decision')]]},{id:'date',label:t('capDate'),type:'date',value:today(),req:1},{id:'note',label:t('capRef')},{id:'priv',label:t('capPriv'),type:'select',value:'no',options:[['no',t('no')],['yes',t('yes')]]}],v=>rpc('propose_representation',{p_circle:cid,p_member:v.who,p_basis:v.basis,p_date:v.date,p_note:v.note,p_private:v.priv==='yes'}),t('capNote'))},
  editAgreement:()=>{const dlg=form;dlg(t('agrEdit'),[{id:'a',label:t('agrT'),type:'textarea'},{id:'d',label:t('date'),type:'date',value:D.circle.family_agreement_date||today()}],v=>upd('circles',cid,{family_agreement:v.a||null,family_agreement_date:v.a?v.d:null}));document.getElementById('f-a').value=D.circle.family_agreement||''},
  confirmRep:()=>act(()=>rpc('confirm_representation',{p_circle:cid}),t('saved')),
